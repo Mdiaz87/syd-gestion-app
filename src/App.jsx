@@ -22,8 +22,6 @@ const BTN_SM = {background:"none",border:`1px solid ${C.border}`,color:C.muted,b
 const SEM_COLOR = {verde:C.green,amarillo:C.warn,rojo:C.danger};
 const SEM_LABEL = {verde:"✅ En control",amarillo:"⚠️ Alerta",rojo:"🔴 Crítico"};
 
-// ── ROLE PINS ─────────────────────────────────────────────────────────────────
-const ROLE_PINS = { "Ingeniero":"0219", "Directivo":"021" };
 
 // ── LOGO ──────────────────────────────────────────────────────────────────────
 function SydLogo({size=44}){
@@ -62,7 +60,6 @@ const TEAM = {
   "Brisas de Baranoa":["Germán Mercado"],
   "Parque Residencial Nona Happy":["Carmelo","Rafael Espinosa","Ivan Pérez"],
 };
-const ALL_TEAM = [...new Set(Object.values(TEAM).flat())].sort((a,b)=>a.localeCompare(b,"es"));
 const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
 const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
 const ACTIVIDADES_CATALOGO = ["Limpieza de vías","Limpieza zona puente","Limpieza general","Movimiento de tierra","Conformación de subrasante","Excavación mecánica","Relleno y compactación","Corte y nivelación","Reemplazo de material","Adecuación zona puente","Compactación de vía principal","Recepción de zahorra","Construcción de bordillos","Estabilización química","Riego y corte de terreno","Transporte de material interno","Otro"];
@@ -164,34 +161,6 @@ function Card({children,style={},borderColor}){
   return <div style={{background:C.bgCard,borderRadius:12,padding:16,border:`1px solid ${borderColor||C.border}`,boxShadow:"0 1px 4px #0001",...style}}>{children}</div>;
 }
 
-// ── PIN MODAL ─────────────────────────────────────────────────────────────────
-function PinModal({role, onConfirm, onCancel}){
-  const [pin,setPin]=useState("");
-  const [error,setError]=useState(false);
-  const check=()=>{
-    if(pin===ROLE_PINS[role]){ onConfirm(); }
-    else { setError(true); setPin(""); }
-  };
-  return (
-    <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
-      <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:340,width:"100%",boxShadow:"0 10px 40px #0003",textAlign:"center"}}>
-        <div style={{fontSize:28,marginBottom:8}}>🔒</div>
-        <h3 style={{color:C.blue,margin:"0 0 4px"}}>Acceso {role}</h3>
-        <p style={{color:C.muted,fontSize:13,marginBottom:16}}>Ingresa la clave para continuar</p>
-        <input type="password" inputMode="numeric" style={{...INP,textAlign:"center",fontSize:20,letterSpacing:4,marginBottom:error?8:16}}
-          placeholder="••••" value={pin} autoFocus
-          onChange={e=>{setPin(e.target.value.replace(/[^0-9]/g,""));setError(false);}}
-          onKeyDown={e=>e.key==="Enter"&&check()}/>
-        {error&&<div style={{color:C.danger,fontSize:12,marginBottom:16}}>Clave incorrecta, intenta de nuevo</div>}
-        <div style={{display:"flex",gap:10}}>
-          <button onClick={onCancel} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
-          <button onClick={check} disabled={!pin}
-            style={{background:pin?C.blue:C.border,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:pin?"pointer":"not-allowed",fontWeight:600}}>Entrar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── GOOGLE APPS SCRIPT URL ────────────────────────────────────────────────────
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1y7NpivZ5fRbbMtXapUq8msY63OM8knVsxsIF1_8fm_307mcqFDQt-jYwGmPYopfN/exec";
@@ -363,26 +332,6 @@ function ConfirmModal({title, message, onConfirm, onCancel}){
   );
 }
 
-// ── AUTHOR PROMPT MODAL (para edición) ───────────────────────────────────────
-function AuthorPromptModal({onConfirm, onCancel, defaultName}){
-  const [nombre,setNombre]=useState(defaultName||ALL_TEAM[0]);
-  return (
-    <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
-      <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:380,width:"100%",boxShadow:"0 10px 40px #0003"}}>
-        <h3 style={{color:C.blue,margin:"0 0 8px"}}>✏️ ¿Quién está editando?</h3>
-        <p style={{color:C.muted,fontSize:13,marginBottom:14}}>Selecciona tu nombre. Quedará registrado en el historial.</p>
-        <select style={{...INP,marginBottom:16}} value={nombre} onChange={e=>setNombre(e.target.value)}>
-          {ALL_TEAM.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-        <div style={{display:"flex",gap:10}}>
-          <button onClick={onCancel} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
-          <button onClick={()=>onConfirm(nombre)}
-            style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:"pointer",fontWeight:600}}>Continuar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── DESTINATARIOS MODAL ───────────────────────────────────────────────────────
 function DestinatariosManager({project, destinatarios, onSave, onClose}){
@@ -454,6 +403,21 @@ async function saveDestinatarios(project, emails){
     .from('destinatarios')
     .upsert({ project, emails }, { onConflict: 'project' });
   if(error){ console.error('Error guardando destinatarios:', error); return false; }
+  return true;
+}
+async function loadUsuarios(){
+  const { data, error } = await supabase.from('usuarios').select('*').order('nombre');
+  if(error){ console.error('Error cargando usuarios:', error); return []; }
+  return data || [];
+}
+async function saveUsuario(usuario){
+  const { error } = await supabase.from('usuarios').insert(usuario);
+  if(error){ console.error('Error guardando usuario:', error); return false; }
+  return true;
+}
+async function updateUsuario(id, changes){
+  const { error } = await supabase.from('usuarios').update(changes).eq('id', id);
+  if(error){ console.error('Error actualizando usuario:', error); return false; }
   return true;
 }
 
@@ -529,16 +493,15 @@ function ActivityRow({act, onChange, onRemove}){
 }
 
 // ── COORDINADOR FORM ──────────────────────────────────────────────────────────
-function CoordForm({onSubmit, editingReport, onCancelEdit}){
+function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const initial = editingReport;
   const [project,setProject]=useState(initial?.project||PROJECTS[0]);
-  const [author,setAuthor]=useState(initial?.author||TEAM[initial?.project||PROJECTS[0]][0]);
+  const author = initial?.author || usuario.nombre;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [days,setDays]=useState(initial?.days||[emptyDay()]);
   const [resumen,setResumen]=useState(initial?.resumen||"");
   const [sending,setSending]=useState(false);
   const [sent,setSent]=useState(false);
-  const [showAuthorPrompt,setShowAuthorPrompt]=useState(false);
 
   const chgProj=p=>{setProject(p);};
   const setDay=(i,k,v)=>setDays(ds=>ds.map((d,j)=>j===i?{...d,[k]:v}:d));
@@ -550,7 +513,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
   const addPh=(di,urls)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:[...d.photos,...urls].slice(0,6)}));
   const rmPh=(di,pi)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:d.photos.filter((_,k)=>k!==pi)}));
 
-  const doSubmit=async(editorName)=>{
+  const doSubmit=async()=>{
     setSending(true);
     const now=new Date().toISOString();
     const baseReport={
@@ -560,9 +523,9 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
       activities:days.map(d=>d.activities.map(a=>a.actividad==="Otro"?a.actividadOtro:a.actividad).filter(Boolean).join(", ")).join(" | "),
       novelties:days.map(d=>d.novelties).filter(Boolean).join(" | ")||"Sin novedades",
     };
-    let history = initial?.history || [{accion:"Creado",por:author,fecha:initial?.createdAt||now}];
+    let history = initial?.history || [{accion:"Creado",por:author,uid:usuario.id,fecha:initial?.createdAt||now}];
     if(editingReport){
-      history=[...history,{accion:"Editado",por:editorName,fecha:now}];
+      history=[...history,{accion:"Editado",por:usuario.nombre,uid:usuario.id,fecha:now}];
     }
     const report={...baseReport, createdAt: initial?.createdAt||now, history};
     await onSubmit(report, !!editingReport);
@@ -571,10 +534,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
     setTimeout(()=>setSent(false),3000);
   };
 
-  const handleClick=()=>{
-    if(editingReport){ setShowAuthorPrompt(true); }
-    else { doSubmit(author); }
-  };
+  const handleClick=()=>{ doSubmit(); };
 
   return (
     <div>
@@ -594,7 +554,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>
-            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{ALL_TEAM.map(p=><option key={p}>{p}</option>)}</select>
+            <div style={{...INP,background:C.bgCard,color:C.text,display:"flex",alignItems:"center",gap:6,cursor:"default"}}>👤 {author}</div>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>% Avance de Obra</label>
@@ -671,20 +631,17 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
         {sending?"Guardando...":sent?"✅ Enviado":editingReport?"Guardar Cambios":"Enviar Informe"}
       </button>
 
-      {showAuthorPrompt&&(
-        <AuthorPromptModal defaultName={author} onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
-      )}
     </div>
   );
 }
 
 // ── INGENIERO FORM ────────────────────────────────────────────────────────────
-function IngForm({onSubmit, editingReport, onCancelEdit}){
+function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const initial = editingReport;
   const initFrentes = (proj) => (FRENTES_POR_PROYECTO[proj]||FRENTES_MASTER).map(nombre=>emptyFrente(nombre));
 
   const [project,setProject]=useState(initial?.project||PROJECTS[0]);
-  const [author,setAuthor]=useState(initial?.author||TEAM[initial?.project||PROJECTS[0]][0]);
+  const author = initial?.author || usuario.nombre;
   const [type,setType]=useState(initial?.type||"mensual");
   const [mes,setMes]=useState(initial?.mes||"");
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
@@ -695,7 +652,6 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
   const [resumen,setResumen]=useState(initial?.resumen||"");
   const [sending,setSending]=useState(false);
   const [sent,setSent]=useState(false);
-  const [showAuthorPrompt,setShowAuthorPrompt]=useState(false);
 
   const chgProj=p=>{setProject(p);setFrentes(initFrentes(p));};
   const setFr=(fi,k,v)=>setFrentes(fs=>fs.map((f,j)=>j===fi?{...f,[k]:v}:f));
@@ -711,7 +667,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
   const totalGastos=frentes.reduce((s,f)=>s+f.gastos.reduce((ss,g)=>ss+(+g.valor||0),0),0);
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
 
-  const doSubmit=async(editorName)=>{
+  const doSubmit=async()=>{
     setSending(true);
     const now=new Date().toISOString();
     const baseReport={
@@ -721,9 +677,9 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
       activities:frentes.map(f=>f.nombre).join(", "),
       novelties:frentes.map(f=>f.descripcion).filter(Boolean).slice(0,1).join(" ")||"Sin novedades",
     };
-    let history = initial?.history || [{accion:"Creado",por:author,fecha:initial?.createdAt||now}];
+    let history = initial?.history || [{accion:"Creado",por:author,uid:usuario.id,fecha:initial?.createdAt||now}];
     if(editingReport){
-      history=[...history,{accion:"Editado",por:editorName,fecha:now}];
+      history=[...history,{accion:"Editado",por:usuario.nombre,uid:usuario.id,fecha:now}];
     }
     const report={...baseReport, createdAt: initial?.createdAt||now, history};
     await onSubmit(report, !!editingReport);
@@ -732,10 +688,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
     setTimeout(()=>setSent(false),3000);
   };
 
-  const handleClick=()=>{
-    if(editingReport){ setShowAuthorPrompt(true); }
-    else { doSubmit(author); }
-  };
+  const handleClick=()=>{ doSubmit(); };
 
   return (
     <div>
@@ -756,7 +709,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>
-            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{ALL_TEAM.map(p=><option key={p}>{p}</option>)}</select>
+            <div style={{...INP,background:C.bgCard,color:C.text,display:"flex",alignItems:"center",gap:6,cursor:"default"}}>👤 {author}</div>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Tipo</label>
@@ -913,9 +866,6 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
         {sending?"Guardando...":sent?"✅ Enviado":editingReport?"Guardar Cambios":"Enviar Informe"}
       </button>
 
-      {showAuthorPrompt&&(
-        <AuthorPromptModal defaultName={author} onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
-      )}
     </div>
   );
 }
@@ -1074,7 +1024,7 @@ function ReportDetail({report,onBack}){
           <SectionTitle color={C.muted}>Historial del Informe</SectionTitle>
           {report.history.map((h,hi)=>(
             <div key={hi} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:hi<report.history.length-1?`1px solid ${C.border}`:"none"}}>
-              <span style={{color:h.accion==="Creado"?C.green:C.warn,fontWeight:600}}>{h.accion==="Creado"?"🆕":"✏️"} {h.accion} por {h.por}</span>
+              <span style={{color:h.accion==="Creado"?C.green:C.warn,fontWeight:600}}>{h.accion==="Creado"?"🆕":"✏️"} {h.accion} por {h.por}{h.uid&&<span title="Identidad verificada por login" style={{marginLeft:4,fontSize:10}}>🔒</span>}</span>
               <span style={{color:C.muted}}>{new Date(h.fecha).toLocaleString("es-CO")}</span>
             </div>
           ))}
@@ -1178,9 +1128,174 @@ function Dashboard({reports}){
   );
 }
 
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function LoginScreen({usuarios, onLogin}){
+  const activos = usuarios.filter(u=>u.activo);
+  const nombreCount = {};
+  activos.forEach(u=>{ const p=u.nombre.split(" ")[0]; nombreCount[p]=(nombreCount[p]||0)+1; });
+  const label = u => nombreCount[u.nombre.split(" ")[0]]>1 ? `${u.nombre} — ${u.rol}` : u.nombre;
+  const sorted = [...activos].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
+  const [selId,setSelId]=useState(sorted[0]?.id||"");
+  const [pin,setPin]=useState("");
+  const [error,setError]=useState(false);
+  const check=()=>{
+    const u=activos.find(u=>u.id===+selId);
+    if(u&&pin===u.pin){ onLogin(u); }
+    else{ setError(true); setPin(""); }
+  };
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
+      <div style={{background:C.bgCard,borderRadius:20,padding:"40px 48px",boxShadow:"0 8px 32px #1b3a6b18",maxWidth:400,width:"100%"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:6}}><SydLogo size={34}/></div>
+        <div style={{color:C.muted,fontSize:12,letterSpacing:2,textTransform:"uppercase",textAlign:"center",marginBottom:6}}>Sistema de Gestión de Proyectos</div>
+        <div style={{width:50,height:3,background:`linear-gradient(90deg,${C.blue},${C.yellow},${C.green})`,borderRadius:2,margin:"0 auto 28px"}}/>
+        <div style={{marginBottom:14}}>
+          <label style={{color:C.muted,fontSize:12,display:"block",marginBottom:6}}>¿Quién eres?</label>
+          <select style={{...INP,fontSize:14}} value={selId} onChange={e=>{setSelId(e.target.value);setError(false);setPin("");}}>
+            {sorted.map(u=><option key={u.id} value={u.id}>{label(u)}</option>)}
+          </select>
+        </div>
+        <div style={{marginBottom:error?8:20}}>
+          <label style={{color:C.muted,fontSize:12,display:"block",marginBottom:6}}>Código personal (4 dígitos)</label>
+          <input type="password" inputMode="numeric" maxLength={4} autoFocus
+            style={{...INP,textAlign:"center",fontSize:22,letterSpacing:6}}
+            placeholder="••••" value={pin}
+            onChange={e=>{setPin(e.target.value.replace(/[^0-9]/g,"").slice(0,4));setError(false);}}
+            onKeyDown={e=>e.key==="Enter"&&check()}/>
+        </div>
+        {error&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>Código incorrecto. Intenta de nuevo.</div>}
+        <button onClick={check} disabled={pin.length!==4}
+          style={{background:pin.length===4?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4?"pointer":"not-allowed",width:"100%"}}>
+          Entrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── PANEL ADMIN ───────────────────────────────────────────────────────────────
+function PanelAdmin({usuarios, onUsuariosChange}){
+  const [editando,setEditando]=useState(null);
+  const [editNombre,setEditNombre]=useState("");
+  const [editRol,setEditRol]=useState("");
+  const [nuevoPin,setNuevoPin]=useState(null);
+  const [showAdd,setShowAdd]=useState(false);
+  const [addNombre,setAddNombre]=useState("");
+  const [addRol,setAddRol]=useState("Coordinador");
+
+  const genPin=()=>{
+    const usados=usuarios.map(u=>u.pin);
+    let p; do{ p=String(Math.floor(1000+Math.random()*9000)); }while(usados.includes(p));
+    return p;
+  };
+  const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);};
+  const saveEdit=async u=>{
+    const ok=await updateUsuario(u.id,{nombre:editNombre,rol:editRol});
+    if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,nombre:editNombre,rol:editRol}:x));
+    setEditando(null);
+  };
+  const toggleActivo=async u=>{
+    const ok=await updateUsuario(u.id,{activo:!u.activo});
+    if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,activo:!u.activo}:x));
+  };
+  const regenPin=async u=>{
+    const pin=genPin();
+    const ok=await updateUsuario(u.id,{pin});
+    if(ok){ onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,pin}:x)); setNuevoPin({nombre:u.nombre,pin}); }
+  };
+  const addUser=async()=>{
+    if(!addNombre.trim()) return;
+    const pin=genPin();
+    await saveUsuario({nombre:addNombre.trim(),rol:addRol,pin,activo:true});
+    const updated=await loadUsuarios();
+    onUsuariosChange(updated);
+    setNuevoPin({nombre:addNombre.trim(),pin});
+    setShowAdd(false); setAddNombre(""); setAddRol("Coordinador");
+  };
+
+  const sorted=[...usuarios].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
+  const ROL_C={Directivo:C.blue,Ingeniero:C.yellow,Coordinador:C.green};
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h2 style={{color:C.blue,margin:0,fontWeight:800}}>👥 Equipo</h2>
+        <button onClick={()=>setShowAdd(true)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontWeight:600,fontSize:13}}>+ Agregar persona</button>
+      </div>
+      {nuevoPin&&(
+        <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:16,marginBottom:16}}>
+          <div style={{color:C.green,fontWeight:700,marginBottom:4}}>✅ Código para <b>{nuevoPin.nombre}</b></div>
+          <div style={{fontSize:14}}>Código: <b style={{fontSize:22,letterSpacing:6,color:C.blue}}>{nuevoPin.pin}</b></div>
+          <div style={{color:C.muted,fontSize:12,marginTop:4}}>Anota este código — no se vuelve a mostrar igual.</div>
+          <button onClick={()=>setNuevoPin(null)} style={{...BTN_SM,marginTop:8}}>Entendido</button>
+        </div>
+      )}
+      {showAdd&&(
+        <Card style={{marginBottom:16,border:`1px solid ${C.blue}44`}}>
+          <SectionTitle>Nueva persona</SectionTitle>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            <div>
+              <label style={{color:C.muted,fontSize:12}}>Nombre completo</label>
+              <input style={INP} value={addNombre} onChange={e=>setAddNombre(e.target.value)} placeholder="Ej: Juan Pérez"/>
+            </div>
+            <div>
+              <label style={{color:C.muted,fontSize:12}}>Rol</label>
+              <select style={INP} value={addRol} onChange={e=>setAddRol(e.target.value)}>
+                {["Coordinador","Ingeniero","Directivo"].map(r=><option key={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{color:C.muted,fontSize:12,marginBottom:12}}>El código se genera automáticamente y se muestra una sola vez.</div>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={()=>{setShowAdd(false);setAddNombre("");}} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
+            <button onClick={addUser} disabled={!addNombre.trim()}
+              style={{background:addNombre.trim()?C.blue:C.border,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:addNombre.trim()?"pointer":"not-allowed",fontWeight:600}}>Agregar</button>
+          </div>
+        </Card>
+      )}
+      <div style={{display:"grid",gap:8}}>
+        {sorted.map(u=>(
+          <div key={u.id} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:14,opacity:u.activo?1:0.55}}>
+            {editando===u.id?(
+              <div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <input style={INP} value={editNombre} onChange={e=>setEditNombre(e.target.value)}/>
+                  <select style={INP} value={editRol} onChange={e=>setEditRol(e.target.value)}>
+                    {["Coordinador","Ingeniero","Directivo"].map(r=><option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setEditando(null)} style={{...BTN_SM,flex:1,padding:8}}>Cancelar</button>
+                  <button onClick={()=>saveEdit(u)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:8,flex:1,cursor:"pointer",fontWeight:600}}>Guardar</button>
+                </div>
+              </div>
+            ):(
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                <div>
+                  <span style={{color:C.text,fontWeight:600,fontSize:14}}>{u.nombre}</span>
+                  {!u.activo&&<span style={{color:C.muted,fontSize:12,marginLeft:8}}>(inactivo)</span>}
+                  <div style={{marginTop:4}}>
+                    <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{u.rol}</span>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>startEdit(u)} style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️ Editar</button>
+                  <button onClick={()=>regenPin(u)} style={{...BTN_SM,color:C.warn,borderColor:C.warn}}>🔑 Código</button>
+                  <button onClick={()=>toggleActivo(u)} style={{...BTN_SM,color:u.activo?C.danger:C.green,borderColor:u.activo?C.danger:C.green}}>{u.activo?"Desactivar":"Activar"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App(){
-  const [role,setRole]=useState(null);
+  const [usuario,setUsuario]=useState(null);
+  const [usuarios,setUsuarios]=useState([]);
   const [tab,setTab]=useState("dashboard");
   const [reports,setReports]=useState([]);
   const [selected,setSelected]=useState(null);
@@ -1191,12 +1306,14 @@ export default function App(){
   const [destinatarios,setDestinatarios]=useState({});
   const [showDest,setShowDest]=useState(false);
   const [destProject,setDestProject]=useState(PROJECTS[0]);
-  const [pendingRole,setPendingRole]=useState(null);
 
   useEffect(()=>{
     (async()=>{
-      const [r,d] = await Promise.all([loadReports(), loadDestinatarios()]);
-      setReports(r); setDestinatarios(d); setLoading(false);
+      const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
+      setReports(r); setDestinatarios(d); setUsuarios(u);
+      const saved = sessionStorage.getItem("syd_usuario");
+      if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
+      setLoading(false);
     })();
   },[]);
 
@@ -1235,50 +1352,22 @@ export default function App(){
     setDeletingReport(null);
   };
 
-  const ROLE_CONFIG = [
-    {r:"Coordinador", icon:"📋", color:C.green,  desc:"Informes diarios y semanales"},
-    {r:"Ingeniero",   icon:"🏗️", color:C.yellow, desc:"Informes técnicos mensuales"},
-    {r:"Directivo",   icon:"📊", color:C.blue,   desc:"Dashboard y seguimiento"},
-  ];
-
   if(loading) return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:C.muted,fontFamily:"'Segoe UI',Arial,sans-serif"}}>Cargando...</div>
     </div>
   );
 
-  if(!role) return (
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
-      <div style={{background:C.bgCard,borderRadius:20,padding:"40px 48px",boxShadow:"0 8px 32px #1b3a6b18",textAlign:"center",maxWidth:420,width:"100%"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:6}}><SydLogo size={34}/></div>
-        <div style={{color:C.muted,fontSize:12,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Sistema de Gestión de Proyectos</div>
-        <div style={{width:50,height:3,background:`linear-gradient(90deg,${C.blue},${C.yellow},${C.green})`,borderRadius:2,margin:"0 auto 28px"}}/>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {ROLE_CONFIG.map(({r,icon,color,desc})=>(
-            <button key={r} onClick={()=>{
-                if(ROLE_PINS[r]){ setPendingRole(r); }
-                else { setRole(r); setTab(r==="Directivo"?"dashboard":"nuevo"); }
-              }}
-              style={{background:C.bg,border:`1.5px solid ${color}55`,borderLeft:`5px solid ${color}`,borderRadius:12,padding:"14px 18px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:14}}>
-              <span style={{fontSize:22}}>{icon}</span>
-              <div>
-                <div style={{color,fontWeight:700,fontSize:15}}>{r}{ROLE_PINS[r]&&<span style={{marginLeft:6,fontSize:12}}>🔒</span>}</div>
-                <div style={{color:C.muted,fontSize:12}}>{desc}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-      {pendingRole&&(
-        <PinModal role={pendingRole}
-          onCancel={()=>setPendingRole(null)}
-          onConfirm={()=>{ setRole(pendingRole); setTab(pendingRole==="Directivo"?"dashboard":"nuevo"); setPendingRole(null); }}/>
-      )}
-    </div>
+  if(!usuario) return (
+    <LoginScreen usuarios={usuarios} onLogin={u=>{
+      setUsuario(u);
+      sessionStorage.setItem("syd_usuario",JSON.stringify(u));
+      setTab(u.rol==="Directivo"?"dashboard":"nuevo");
+    }}/>
   );
 
-  const tabs = role==="Directivo"
-    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"informes",label:"📁 Informes"},{id:"destinatarios",label:"📧 Destinatarios"}]
+  const tabs = usuario.rol==="Directivo"
+    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"informes",label:"📁 Informes"},{id:"destinatarios",label:"📧 Destinatarios"},{id:"equipo",label:"👥 Equipo"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
@@ -1286,8 +1375,11 @@ export default function App(){
       <div style={{background:C.bgCard,borderBottom:`1px solid ${C.border}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 1px 6px #1b3a6b0e"}}>
         <SydLogo size={30}/>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{color:C.muted,fontSize:13,background:C.bgCard2,padding:"3px 14px",borderRadius:20,border:`1px solid ${C.border}`}}>{role}</span>
-          <button onClick={()=>setRole(null)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
+          <div style={{textAlign:"right"}}>
+            <div style={{color:C.text,fontSize:13,fontWeight:600}}>{usuario.nombre}</div>
+            <div style={{color:C.muted,fontSize:11}}>{usuario.rol}</div>
+          </div>
+          <button onClick={()=>{setUsuario(null);sessionStorage.removeItem("syd_usuario");}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
         </div>
       </div>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,padding:"0 24px",background:C.bgCard}}>
@@ -1345,8 +1437,9 @@ export default function App(){
         </div>
       )}
         {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)}/>}
-        {tab==="nuevo"&&role==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit}/>}
-        {tab==="nuevo"&&role==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit}/>}
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+        {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
         {tab==="destinatarios"&&(
           <div>
             <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Destinatarios por Proyecto</h2>
