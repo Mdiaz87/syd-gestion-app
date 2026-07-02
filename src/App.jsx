@@ -260,13 +260,21 @@ async function enviarADrive(report){
     if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
     if(sinFotos.frentes) sinFotos.frentes = sinFotos.frentes.map(f=>({...f,photos:[]}));
 
-    // Contenedor oculto para renderizar el HTML antes de convertir a PDF
-    const contenedor = document.createElement('div');
-    contenedor.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#f4f6f9';
-    contenedor.innerHTML = generarHTMLInforme(sinFotos, true);
-    document.body.appendChild(contenedor);
-
+    // Importar primero para que el bundle esté listo antes de tocar el DOM
     const html2pdf = (await import('html2pdf.js')).default;
+
+    // Wrapper en (0,0) con overflow:hidden — visible para html2canvas, invisible al usuario
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
+    const contenedor = document.createElement('div');
+    contenedor.style.cssText = 'width:794px;background:#f4f6f9;';
+    contenedor.innerHTML = generarHTMLInforme(sinFotos, true);
+    wrapper.appendChild(contenedor);
+    document.body.appendChild(wrapper);
+
+    // Espera para que el navegador pinte los estilos antes de que html2canvas capture
+    await new Promise(r => setTimeout(r, 300));
+
     const pdfBlob = await html2pdf()
       .set({
         margin:0,
@@ -277,7 +285,7 @@ async function enviarADrive(report){
       .from(contenedor)
       .outputPdf('blob');
 
-    document.body.removeChild(contenedor);
+    document.body.removeChild(wrapper);
 
     const pdfBase64 = await new Promise((res,rej)=>{
       const reader = new FileReader();
