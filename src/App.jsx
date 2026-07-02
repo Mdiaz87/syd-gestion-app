@@ -194,7 +194,7 @@ function PinModal({role, onConfirm, onCancel}){
 }
 
 // ── GOOGLE APPS SCRIPT URL ────────────────────────────────────────────────────
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx1APOWNcqF1BLhV1kPBUwbygjq98xlPPbDTjOMWWsfD5yn1-9PJhAdrpYmdWozs_8B/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw1y7NpivZ5fRbbMtXapUq8msY63OM8knVsxsIF1_8fm_307mcqFDQt-jYwGmPYopfN/exec";
 
 // ── GENERADOR HTML PARA DRIVE ─────────────────────────────────────────────────
 function generarHTMLInforme(report){
