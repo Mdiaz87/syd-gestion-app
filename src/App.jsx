@@ -60,7 +60,7 @@ const TEAM = {
   "Brisas del Lago 1":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas del Lago 2":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas de Baranoa":["Germán Mercado"],
-  "Parque Residencial Nona Happy":["Rafael Espinosa","Ivan Pérez"],
+  "Parque Residencial Nona Happy":["Carmelo","Rafael Espinosa","Ivan Pérez"],
 };
 const ALL_TEAM = [...new Set(Object.values(TEAM).flat())].sort((a,b)=>a.localeCompare(b,"es"));
 const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
