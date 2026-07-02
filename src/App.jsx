@@ -197,7 +197,7 @@ function PinModal({role, onConfirm, onCancel}){
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1y7NpivZ5fRbbMtXapUq8msY63OM8knVsxsIF1_8fm_307mcqFDQt-jYwGmPYopfN/exec";
 
 // ── GENERADOR HTML PARA DRIVE ─────────────────────────────────────────────────
-function generarHTMLInforme(report){
+function generarHTMLInforme(report, soloContenido=false){
   const logoSVG=`<svg width="220" height="47" viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M 9.48 19.00 A 26 26 0 0 1 54.52 19.00" stroke="#2445a0" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M 54.52 19.00 A 26 26 0 0 1 32.00 58.00" stroke="#f5c400" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M 32.00 58.00 A 26 26 0 0 1 9.48 19.00" stroke="#4bb86a" stroke-width="7" stroke-linecap="round" fill="none"/><text x="72" y="38" font-family="Arial Black,Helvetica Neue,Arial,sans-serif" font-weight="900" font-size="30" fill="#ffffff" letter-spacing="-0.5">SYD</text><text x="72" y="58" font-family="Arial Black,Helvetica Neue,Arial,sans-serif" font-weight="700" font-size="18" fill="#ffffff" letter-spacing="1.5">INVERSIONES</text></svg>`;
   const tipoLabel={semanal:"Informe Semanal",mensual:"Informe Mensual",trimestral:"Informe Trimestral"}[report.type]||report.type;
   const fmtN=n=>n?new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(+n):"-";
@@ -252,10 +252,8 @@ function generarHTMLInforme(report){
   // Historial
   const histHTML=(report.history||[]).map(h=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #dde3ee;font-size:12px"><span style="color:${h.accion==="Creado"?"#3aaa6e":"#f5a623"};font-weight:600">${h.accion==="Creado"?"🆕":"✏️"} ${h.accion} por ${h.por}</span><span style="color:#7a90b0">${new Date(h.fecha).toLocaleString("es-CO")}</span></div>`).join("");
 
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>${report.project} — ${tipoLabel}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#1a2540;font-size:13px}table td{padding:6px 8px;border-bottom:1px solid #dde3ee;vertical-align:top}@media print{body{background:#fff}}</style>
-</head><body>
-<div style="background:#1b3a6b;padding:24px 32px;display:flex;justify-content:space-between;align-items:center">${logoSVG}
+  const css=`*{box-sizing:border-box;margin:0;padding:0}table td{padding:6px 8px;border-bottom:1px solid #dde3ee;vertical-align:top}`;
+  const cuerpo = `<div style="background:#1b3a6b;padding:24px 32px;display:flex;justify-content:space-between;align-items:center">${logoSVG}
   <div style="text-align:right;color:#fff">
     <div style="font-size:20px;font-weight:800;margin-bottom:4px">${report.project}</div>
     <div style="color:#a8c4e8;font-size:12px;margin-bottom:2px">${tipoLabel}${report.mes?" — "+report.mes:""}</div>
@@ -280,24 +278,54 @@ function generarHTMLInforme(report){
   ${report.resumen?`${sec("Conclusiones")}<div style="background:#fff;border-radius:10px;border:1px solid #dde3ee;padding:16px"><div style="background:#f0f3f8;border-radius:8px;padding:12px;line-height:1.6">${report.resumen}</div></div>`:""}
   ${histHTML?`${sec("Historial","#7a90b0")}<div style="background:#fff;border-radius:10px;border:1px solid #dde3ee;padding:16px">${histHTML}</div>`:""}
   <div style="text-align:center;color:#7a90b0;font-size:11px;margin-top:20px;padding-bottom:16px">SYD Inversiones — Sistema de Gestión de Proyectos · Generado el ${new Date().toLocaleString("es-CO")}</div>
-</div></body></html>`;
+</div>`;
+  if(soloContenido) return `<style>${css}</style><div style="font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#1a2540;font-size:13px">${cuerpo}</div>`;
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>${report.project} — ${tipoLabel}</title>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#1a2540;font-size:13px}${css}@media print{body{background:#fff}}</style>
+</head><body>${cuerpo}</body></html>`;
 }
 
 async function enviarADrive(report){
   try{
-    // Eliminar fotos (base64) antes de enviar para reducir el tamaño del payload
     const sinFotos = JSON.parse(JSON.stringify(report));
     if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
     if(sinFotos.frentes) sinFotos.frentes = sinFotos.frentes.map(f=>({...f,photos:[]}));
-    const html = generarHTMLInforme(sinFotos);
-    const proy = (report.project||"").replace(/[\s/]/g,"_");
-    const aut  = (report.author||"").replace(/\s/g,"_");
-    const fileName = `Informe_${proy}_${report.type}_${report.date}_${aut}.html`;
+
+    // Contenedor oculto para renderizar el HTML antes de convertir a PDF
+    const contenedor = document.createElement('div');
+    contenedor.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#f4f6f9';
+    contenedor.innerHTML = generarHTMLInforme(sinFotos, true);
+    document.body.appendChild(contenedor);
+
+    const html2pdf = (await import('html2pdf.js')).default;
+    const pdfBlob = await html2pdf()
+      .set({
+        margin:0,
+        image:{type:'jpeg',quality:0.92},
+        html2canvas:{scale:2,useCORS:true,logging:false,backgroundColor:'#f4f6f9'},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+      })
+      .from(contenedor)
+      .outputPdf('blob');
+
+    document.body.removeChild(contenedor);
+
+    const pdfBase64 = await new Promise((res,rej)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>res(reader.result.split(',')[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(pdfBlob);
+    });
+
+    const proy = (report.project||'').replace(/[\s/]/g,'_');
+    const aut  = (report.author||'').replace(/\s/g,'_');
+    const fileName = `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
+
     await fetch(GAS_URL, {
-      method:"POST",
-      mode:"no-cors",
-      headers:{"Content-Type":"text/plain"},
-      body: JSON.stringify({ html, fileName })
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type})
     });
     return true;
   }catch(e){
