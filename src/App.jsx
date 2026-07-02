@@ -285,15 +285,19 @@ function generarHTMLInforme(report){
 
 async function enviarADrive(report){
   try{
-    const html = generarHTMLInforme(report);
+    // Eliminar fotos (base64) antes de enviar para reducir el tamaño del payload
+    const sinFotos = JSON.parse(JSON.stringify(report));
+    if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
+    if(sinFotos.frentes) sinFotos.frentes = sinFotos.frentes.map(f=>({...f,photos:[]}));
+    const html = generarHTMLInforme(sinFotos);
     const proy = (report.project||"").replace(/[\s/]/g,"_");
     const aut  = (report.author||"").replace(/\s/g,"_");
     const fileName = `Informe_${proy}_${report.type}_${report.date}_${aut}.html`;
     await fetch(GAS_URL, {
       method:"POST",
       mode:"no-cors",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ informe: report, html, fileName })
+      headers:{"Content-Type":"text/plain"},
+      body: JSON.stringify({ html, fileName })
     });
     return true;
   }catch(e){
