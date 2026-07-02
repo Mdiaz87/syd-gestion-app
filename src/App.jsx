@@ -1313,6 +1313,7 @@ export default function App(){
   const [usuario,setUsuario]=useState(null);
   const [usuarios,setUsuarios]=useState([]);
   const [tab,setTab]=useState("dashboard");
+  const [directivoForm,setDirectivoForm]=useState("coord");
   const [reports,setReports]=useState([]);
   const [selected,setSelected]=useState(null);
   const [editingReport,setEditingReport]=useState(null);
@@ -1358,6 +1359,7 @@ export default function App(){
   const startEdit=(r)=>{
     setEditingReport(r);
     setTab("nuevo");
+    if(usuario.rol==="Directivo") setDirectivoForm(r.role==="Ingeniero"?"ing":"coord");
   };
   const cancelEdit=()=>setEditingReport(null);
 
@@ -1383,7 +1385,7 @@ export default function App(){
   );
 
   const tabs = usuario.rol==="Directivo"
-    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"informes",label:"📁 Informes"},{id:"destinatarios",label:"📧 Destinatarios"},{id:"equipo",label:"👥 Equipo"}]
+    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"destinatarios",label:"📧 Destinatarios"},{id:"equipo",label:"👥 Equipo"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
@@ -1455,6 +1457,24 @@ export default function App(){
         {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)}/>}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Directivo"&&(
+          <div>
+            {!editingReport&&(
+              <div style={{display:"flex",gap:10,marginBottom:20}}>
+                <button onClick={()=>setDirectivoForm("coord")}
+                  style={{flex:1,background:directivoForm==="coord"?C.green:C.bgCard2,color:directivoForm==="coord"?"#fff":C.muted,border:`2px solid ${directivoForm==="coord"?C.green:C.border}`,borderRadius:10,padding:"11px 0",cursor:"pointer",fontWeight:700,fontSize:14,transition:"all .15s"}}>
+                  📋 Informe Coordinador
+                </button>
+                <button onClick={()=>setDirectivoForm("ing")}
+                  style={{flex:1,background:directivoForm==="ing"?C.blue:C.bgCard2,color:directivoForm==="ing"?"#fff":C.muted,border:`2px solid ${directivoForm==="ing"?C.blue:C.border}`,borderRadius:10,padding:"11px 0",cursor:"pointer",fontWeight:700,fontSize:14,transition:"all .15s"}}>
+                  🏗️ Informe Ingeniero
+                </button>
+              </div>
+            )}
+            {directivoForm==="coord"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+            {directivoForm==="ing"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+          </div>
+        )}
         {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
         {tab==="destinatarios"&&(
           <div>
