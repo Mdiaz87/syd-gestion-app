@@ -55,7 +55,7 @@ const TEAM = {
   "Citrino":["Ósmar Álvarez","Ivan Pérez"],
   "Vivante Parque Residencial":["Felipe Zuluaga"],
   "Aqqua Club":["Rafael Espinosa","Ivan Pérez"],
-  "Aqqua 4":["Rafael Espinosa","Ivan Pérez"],
+  "Aqqua 4":["Rafael Espinosa","Ivan Pérez","Oscar Solano"],
   "Atalí Conjunto Campestre":["Mary Sierra"],
   "Brisas del Lago 1":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas del Lago 2":["Jorge Cañate","Camilo","Jorge Torres"],
