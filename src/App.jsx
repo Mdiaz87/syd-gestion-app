@@ -893,13 +893,24 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
 }
 
 // ── DETAIL ────────────────────────────────────────────────────────────────────
+function verImprimirInforme(report){
+  const html = generarHTMLInforme(report);
+  const w = window.open("","_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(), 800);
+}
+
 function ReportDetail({report,onBack}){
   const efic=(report.avanceObra||0)-(report.avanceRecursos||0);
   const st=semaforo(report.avanceObra,report.avanceRecursos,null,null,null,null);
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
   return (
     <div>
-      <button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer",marginBottom:20}}>← Volver</button>
+      <div style={{display:"flex",gap:10,marginBottom:20}}>
+        <button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer"}}>← Volver</button>
+        <button onClick={()=>verImprimirInforme(report)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🖨️ Ver / Exportar PDF</button>
+      </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div>
           <h2 style={{color:C.blue,margin:0}}>{report.project}</h2>
@@ -1064,6 +1075,7 @@ function ReportList({reports,onSelect,onEdit,onDelete}){
             {r.history&&r.history.length>1&&<div style={{color:C.warn,fontSize:11,marginTop:4}}>✏️ Editado {r.history.length-1} {r.history.length-1===1?"vez":"veces"}</div>}
           </div>
           <div style={{display:"flex",gap:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>verImprimirInforme(r)} style={{...BTN_SM,color:C.blue,borderColor:C.blue,flex:1}}>🖨️ Ver / PDF</button>
             <button onClick={()=>onEdit(r)} style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid,flex:1}}>✏️ Editar</button>
             <button onClick={()=>onDelete(r)} style={{...BTN_SM,color:C.danger,borderColor:C.danger,flex:1}}>🗑️ Eliminar</button>
           </div>
