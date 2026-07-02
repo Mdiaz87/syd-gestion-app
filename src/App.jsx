@@ -50,16 +50,19 @@ function SydLogo({size=44}){
 }
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
-const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa"];
+const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Aqqua 4","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa","Parque Residencial Nona Happy"];
 const TEAM = {
   "Citrino":["Ósmar Álvarez","Ivan Pérez"],
   "Vivante Parque Residencial":["Felipe Zuluaga"],
   "Aqqua Club":["Rafael Espinosa","Ivan Pérez"],
+  "Aqqua 4":["Rafael Espinosa","Ivan Pérez"],
   "Atalí Conjunto Campestre":["Mary Sierra"],
   "Brisas del Lago 1":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas del Lago 2":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas de Baranoa":["Germán Mercado"],
+  "Parque Residencial Nona Happy":["Rafael Espinosa","Ivan Pérez"],
 };
+const ALL_TEAM = [...new Set(Object.values(TEAM).flat())].sort((a,b)=>a.localeCompare(b,"es"));
 const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
 const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
 const ACTIVIDADES_CATALOGO = ["Limpieza de vías","Limpieza zona puente","Limpieza general","Movimiento de tierra","Conformación de subrasante","Excavación mecánica","Relleno y compactación","Corte y nivelación","Reemplazo de material","Adecuación zona puente","Compactación de vía principal","Recepción de zahorra","Construcción de bordillos","Estabilización química","Riego y corte de terreno","Transporte de material interno","Otro"];
@@ -116,6 +119,19 @@ const FRENTES_POR_PROYECTO = {
     "Sistema Vial","Movimiento de Tierras / Relleno y Corte","Limpieza y Descapote / Mantenimiento",
     "Redes de Agua","Red Eléctrica / Acometidas","Estructuras Hidráulicas / Bordillos","Entrega de Lotes",
     "Levantamiento Topográfico"
+  ],
+  "Aqqua 4": [
+    "Sistema Vial","Movimiento de Tierras / Relleno y Corte","Limpieza y Descapote / Mantenimiento",
+    "Redes de Agua","Red Eléctrica / Acometidas","Estructuras Hidráulicas / Bordillos",
+    "Drenaje de Aguas Fluviales","Puente / Box Culvert","Portería / Garita","Zonas Sociales","Entrega de Lotes",
+    "Levantamiento Topográfico","Estudios Ambientales","Estudio Hidrológico y Diseño Hidráulico",
+    "Diseño Arquitectónico","Diseño Eléctrico","Diseño de Vías"
+  ],
+  "Parque Residencial Nona Happy": [
+    "Sistema Vial","Vías Externas","Limpieza y Descapote / Mantenimiento",
+    "Redes de Agua","Red Eléctrica / Acometidas","Red de Gas Natural",
+    "Estructuras Hidráulicas / Bordillos","Portería / Garita","Zonas Sociales",
+    "Casa Modelo","Entrega de Lotes","Estudios Ambientales"
   ],
 };
 
@@ -225,19 +241,20 @@ function ConfirmModal({title, message, onConfirm, onCancel}){
 }
 
 // ── AUTHOR PROMPT MODAL (para edición) ───────────────────────────────────────
-function AuthorPromptModal({onConfirm, onCancel}){
-  const [nombre,setNombre]=useState("");
+function AuthorPromptModal({onConfirm, onCancel, defaultName}){
+  const [nombre,setNombre]=useState(defaultName||ALL_TEAM[0]);
   return (
     <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
       <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:380,width:"100%",boxShadow:"0 10px 40px #0003"}}>
         <h3 style={{color:C.blue,margin:"0 0 8px"}}>✏️ ¿Quién está editando?</h3>
-        <p style={{color:C.muted,fontSize:13,marginBottom:14}}>Esto quedará registrado en el historial del informe.</p>
-        <input style={{...INP,marginBottom:16}} placeholder="Tu nombre completo" value={nombre}
-          onChange={e=>setNombre(e.target.value)} onKeyDown={e=>e.key==="Enter"&&nombre.trim()&&onConfirm(nombre.trim())}/>
+        <p style={{color:C.muted,fontSize:13,marginBottom:14}}>Selecciona tu nombre. Quedará registrado en el historial.</p>
+        <select style={{...INP,marginBottom:16}} value={nombre} onChange={e=>setNombre(e.target.value)}>
+          {ALL_TEAM.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onCancel} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
-          <button onClick={()=>nombre.trim()&&onConfirm(nombre.trim())} disabled={!nombre.trim()}
-            style={{background:nombre.trim()?C.blue:C.border,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:nombre.trim()?"pointer":"not-allowed",fontWeight:600}}>Continuar</button>
+          <button onClick={()=>onConfirm(nombre)}
+            style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:"pointer",fontWeight:600}}>Continuar</button>
         </div>
       </div>
     </div>
@@ -400,7 +417,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
   const [sent,setSent]=useState(false);
   const [showAuthorPrompt,setShowAuthorPrompt]=useState(false);
 
-  const chgProj=p=>{setProject(p);setAuthor(TEAM[p][0]);};
+  const chgProj=p=>{setProject(p);};
   const setDay=(i,k,v)=>setDays(ds=>ds.map((d,j)=>j===i?{...d,[k]:v}:d));
   const addDay=()=>setDays(ds=>[...ds,emptyDay()]);
   const rmDay=i=>setDays(ds=>ds.filter((_,j)=>j!==i));
@@ -454,7 +471,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>
-            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{TEAM[project].map(p=><option key={p}>{p}</option>)}</select>
+            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{ALL_TEAM.map(p=><option key={p}>{p}</option>)}</select>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>% Avance de Obra</label>
@@ -532,7 +549,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit}){
       </button>
 
       {showAuthorPrompt&&(
-        <AuthorPromptModal onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
+        <AuthorPromptModal defaultName={author} onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
       )}
     </div>
   );
@@ -557,7 +574,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
   const [sent,setSent]=useState(false);
   const [showAuthorPrompt,setShowAuthorPrompt]=useState(false);
 
-  const chgProj=p=>{setProject(p);setAuthor(TEAM[p][0]);setFrentes(initFrentes(p));};
+  const chgProj=p=>{setProject(p);setFrentes(initFrentes(p));};
   const setFr=(fi,k,v)=>setFrentes(fs=>fs.map((f,j)=>j===fi?{...f,[k]:v}:f));
   const addFr=()=>setFrentes(fs=>[...fs,emptyFrente()]);
   const rmFr=fi=>setFrentes(fs=>fs.filter((_,j)=>j!==fi));
@@ -616,7 +633,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>
-            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{TEAM[project].map(p=><option key={p}>{p}</option>)}</select>
+            <select style={INP} value={author} onChange={e=>setAuthor(e.target.value)}>{ALL_TEAM.map(p=><option key={p}>{p}</option>)}</select>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Tipo</label>
@@ -774,7 +791,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit}){
       </button>
 
       {showAuthorPrompt&&(
-        <AuthorPromptModal onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
+        <AuthorPromptModal defaultName={author} onCancel={()=>setShowAuthorPrompt(false)} onConfirm={(nombre)=>{setShowAuthorPrompt(false);doSubmit(nombre);}}/>
       )}
     </div>
   );
