@@ -1323,16 +1323,41 @@ export default function App(){
   const [destinatarios,setDestinatarios]=useState({});
   const [showDest,setShowDest]=useState(false);
   const [destProject,setDestProject]=useState(PROJECTS[0]);
+  const [localOrfanos,setLocalOrfanos]=useState([]);
+  const [importando,setImportando]=useState(false);
 
   useEffect(()=>{
     (async()=>{
       const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
       setReports(r); setDestinatarios(d); setUsuarios(u);
+      // Detectar informes locales (pre-Supabase) que no están en la BD
+      try{
+        const local = JSON.parse(localStorage.getItem("syd-reports")||"[]");
+        if(local.length>0){
+          const enBD = new Set(r.map(x=>String(x.id)));
+          const huerfanos = local.filter(x=>!enBD.has(String(x.id)));
+          if(huerfanos.length>0) setLocalOrfanos(huerfanos);
+        }
+      }catch(e){}
       const saved = sessionStorage.getItem("syd_usuario");
       if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
       setLoading(false);
     })();
   },[]);
+
+  const recuperarLocales=async()=>{
+    setImportando(true);
+    const recuperados=[];
+    for(const r of localOrfanos){
+      const ok = await saveReport(r, false);
+      if(ok) recuperados.push(r);
+    }
+    if(recuperados.length>0){
+      setReports(prev=>[...prev,...recuperados].sort((a,b)=>a.id-b.id));
+      setLocalOrfanos([]);
+    }
+    setImportando(false);
+  };
 
   const submit=async(r, wasEditing)=>{
     const updated = wasEditing
@@ -1442,6 +1467,27 @@ export default function App(){
         {tab==="dashboard"&&<Dashboard reports={reports}/>}
       {tab==="informes"&&!selected&&(
         <div>
+          {localOrfanos.length>0&&(
+            <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:12,padding:16,marginBottom:20}}>
+              <div style={{color:C.warn,fontWeight:700,fontSize:14,marginBottom:6}}>
+                ⚠️ Se encontraron {localOrfanos.length} informe{localOrfanos.length!==1?"s":""} guardado{localOrfanos.length!==1?"s":""} en este dispositivo que no están en la base de datos compartida.
+              </div>
+              <div style={{color:C.text,fontSize:13,marginBottom:12}}>
+                Estos informes fueron creados antes de la migración a Supabase. Haz clic en "Recuperar" para subirlos al sistema y que todos puedan verlos.
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+                {localOrfanos.map(r=>(
+                  <span key={r.id} style={{background:C.warn+"22",color:C.text,borderRadius:8,padding:"4px 10px",fontSize:12}}>
+                    {r.project} · {r.date} · {r.author}
+                  </span>
+                ))}
+              </div>
+              <button onClick={recuperarLocales} disabled={importando}
+                style={{background:importando?C.border:C.warn,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",cursor:importando?"default":"pointer",fontWeight:700,fontSize:14}}>
+                {importando?"Recuperando...":"📤 Recuperar informes en este dispositivo"}
+              </button>
+            </div>
+          )}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
             <h2 style={{color:C.blue,margin:0,fontWeight:800}}>Informes</h2>
             {reports.length>0&&(
