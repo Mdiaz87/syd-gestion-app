@@ -211,8 +211,22 @@ function generarHTMLInforme(report, soloContenido=false){
   }).join("");
 
   // Financiero
-  const finRows=(report.financiero||[]).filter(f=>f.presupuesto).map(f=>`<tr><td style="font-weight:600;color:#1b3a6b;font-size:11px">${f.item}</td>${["presupuesto","ejec2124","ejec2526","totalEjec"].map(k=>`<td style="text-align:right">${fmtN(f[k])}</td>`).join("")}<td style="text-align:center;color:${+f.pct>=90?"#3aaa6e":+f.pct>=60?"#f5a623":"#e05252"};font-weight:700">${f.pct||"-"}%</td><td style="text-align:right">${fmtN(f.porEjecutar)}</td></tr>`).join("");
-  const financieroHTML=finRows?`${sec("Resumen Financiero Global")}<div style="background:#fff;border-radius:10px;border:1px solid #dde3ee;padding:14px;overflow-x:auto">${tableWrap(["Ítem","Presupuestado","Ejec. 21-24","Ejec. 25-26","Total Ejec.","% Ejec.","Por Ejecutar"],finRows)}</div>`:"";
+  const finItems=(report.financiero||[]).filter(f=>f.presupuesto||(f.ejecutado!==undefined?f.ejecutado:f.totalEjec));
+  const finTotalPres=finItems.reduce((s,f)=>s+(+f.presupuesto||0),0);
+  const finTotalEjec=finItems.reduce((s,f)=>s+(f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0),0);
+  const finTotalPct=finTotalPres>0?finTotalEjec/finTotalPres*100:0;
+  const finTotalBarColor=finTotalPct>100?"#e05252":finTotalPct>=90?"#3aaa6e":finTotalPct>=60?"#f5a623":"#e05252";
+  const finRows=finItems.map(f=>{
+    const pres=+f.presupuesto||0;
+    const ejec=f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0;
+    const pct=pres>0?ejec/pres*100:0;
+    const balance=pres-ejec;
+    const barColor=pct>100?"#e05252":pct>=90?"#3aaa6e":pct>=60?"#f5a623":"#e05252";
+    const balHtml=pres&&ejec?(balance>0?`<span style="color:#3aaa6e;font-weight:700">💚 Ahorro: ${fmtN(balance)}</span>`:balance<0?`<span style="color:#e05252;font-weight:700">🔴 Sobrecosto: ${fmtN(Math.abs(balance))}</span>`:`<span style="color:#7a90b0">En punto</span>`):"-";
+    return `<tr style="border-bottom:1px solid #dde3ee"><td style="font-weight:600;color:#1b3a6b;font-size:11px;padding:10px 8px">${f.item}</td><td style="text-align:right;padding:10px 8px">${fmtN(pres)}</td><td style="text-align:right;padding:10px 8px">${fmtN(ejec)}</td><td style="padding:10px 8px;min-width:140px">${pres?`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#dde3ee;border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.min(pct,100).toFixed(1)}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="color:${barColor};font-weight:700;font-size:10px;white-space:nowrap">Ejec: ${pct.toFixed(1)}%</span></div>${pct<=100&&ejec?`<div style="color:#7a90b0;font-size:10px;margin-top:3px">Por ejec: ${(100-pct).toFixed(1)}%</div>`:""}`:"−"}</td><td style="padding:10px 8px">${balHtml}</td></tr>`;
+  }).join("");
+  const finTotalRow=finTotalPres?`<tr style="background:#f0f3f8;font-weight:700"><td style="color:#1b3a6b;padding:10px 8px;font-size:11px">TOTAL GENERAL</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalPres)}</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalEjec)}</td><td style="padding:10px 8px;min-width:140px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#dde3ee;border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.min(finTotalPct,100).toFixed(1)}%;height:100%;background:${finTotalBarColor};border-radius:3px"></div></div><span style="color:${finTotalBarColor};font-weight:700;font-size:10px;white-space:nowrap">Ejec: ${finTotalPct.toFixed(1)}%</span></div>${finTotalPct<=100&&finTotalEjec?`<div style="color:#7a90b0;font-size:10px;margin-top:3px">Por ejec: ${(100-finTotalPct).toFixed(1)}%</div>`:""}</td><td style="padding:10px 8px"></td></tr>`:"";
+  const financieroHTML=finRows?`${sec("Resumen Financiero Global")}<div style="background:#fff;border-radius:10px;border:1px solid #dde3ee;padding:14px;overflow-x:auto">${tableWrap(["Ítem","Presupuesto","Ejecutado","Progreso","Balance"],finRows+finTotalRow)}</div>`:"";
 
   // Trámites
   const tramHTML=(report.tramites||[]).filter(t=>t.pct).map(t=>`<div style="display:flex;align-items:center;gap:12px;background:#f0f3f8;border-radius:6px;padding:8px 12px;margin-bottom:6px"><span style="flex:1;font-size:12px">${t.tramite}</span><div style="width:120px;background:#dde3ee;border-radius:4px;height:6px;overflow:hidden"><div style="width:${Math.min(+t.pct,100)}%;height:100%;border-radius:4px;background:${+t.pct>=100?"#3aaa6e":+t.pct>=50?"#f5a623":"#e05252"}"></div></div><span style="color:${+t.pct>=100?"#3aaa6e":+t.pct>=50?"#f5a623":"#e05252"};font-weight:700;font-size:12px;min-width:36px">${t.pct}%</span></div>`).join("");
@@ -386,7 +400,7 @@ async function loadReports(){
     .from('reports')
     .select('data')
     .order('id', { ascending: true });
-  if(error){ console.error('Error cargando informes:', error); return []; }
+  if(error){ console.error('Error cargando informes:', error); return null; }
   return (data || []).map(row => row.data);
 }
 async function saveReport(report, isEdit = false){
@@ -434,7 +448,7 @@ const emptyAct = () => ({id:Date.now()+Math.random(),actividad:"",actividadOtro:
 const emptyDay=()=>({id:Date.now()+Math.random(),date:"",climaPrincipal:"Soleado",inicioJornada:"7:30",finJornada:"16:30",activities:[emptyAct()],novelties:"",photos:[]});
 const emptyGasto=()=>({id:Date.now()+Math.random(),proveedor:"",estado:"Aprobado",descripcion:"",valor:"",centroCosto:""});
 const emptyFrente=(nombre)=>({id:Date.now()+Math.random(),nombre:nombre||"Otro",descripcion:"",gastos:[emptyGasto()],photos:[],lotesData:null});
-const emptyFinanciero=()=>ITEMS_FIN.map(item=>({item,presupuesto:"",ejec2124:"",ejec2526:"",totalEjec:"",pct:"",porEjecutar:""}));
+const emptyFinanciero=()=>ITEMS_FIN.map(item=>({item,presupuesto:"",ejecutado:""}));
 const emptyTramite=()=>TRAMITES.map(t=>({tramite:t,pct:""}));
 
 function PhotoUpload({photos,onAdd,onRemove}){
@@ -821,25 +835,81 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
 
       <Card style={{marginBottom:16}}>
         <SectionTitle color={C.blue}>Resumen Financiero Global del Proyecto</SectionTitle>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr style={{background:C.blue+"12"}}>
-              {["Ítem","Presupuestado","Ejec. 2021-2024","Ejec. 2025-2026","Total Ejecutado","% Ejec.","Por Ejecutar"].map(h=>(
-                <th key={h} style={{padding:"8px 10px",color:C.blue,textAlign:"left",borderBottom:`2px solid ${C.blue}22`,whiteSpace:"nowrap",fontWeight:700}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>{financiero.map((f,ii)=>(
-              <tr key={f.item} style={{borderBottom:`1px solid ${C.border}`}}>
-                <td style={{padding:"6px 8px",color:C.blue,fontWeight:600,whiteSpace:"nowrap",fontSize:11}}>{f.item}</td>
-                {["presupuesto","ejec2124","ejec2526","totalEjec"].map(k=>(
-                  <td key={k} style={{padding:"4px 6px"}}><input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f[k]} placeholder="$" onChange={e=>setFin(ii,k,e.target.value)}/></td>
-                ))}
-                <td style={{padding:"4px 6px"}}><input style={{...INP,padding:"4px 8px",fontSize:12,width:60}} value={f.pct} placeholder="%" onChange={e=>setFin(ii,"pct",e.target.value)}/></td>
-                <td style={{padding:"4px 6px"}}><input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.porEjecutar} placeholder="$" onChange={e=>setFin(ii,"porEjecutar",e.target.value)}/></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        {financiero.map((f,ii)=>{
+          const pres=+f.presupuesto||0;
+          const ejec=+f.ejecutado||0;
+          const pct=pres>0?ejec/pres*100:0;
+          const balance=pres-ejec;
+          const barColor=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
+          return (
+            <div key={f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+                <div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
+                <div style={{flex:1,minWidth:110}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
+                  <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} placeholder="$" onChange={e=>setFin(ii,"presupuesto",e.target.value)}/>
+                </div>
+                <div style={{flex:1,minWidth:110}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Ejecutado (COP)</div>
+                  <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} placeholder="$" onChange={e=>setFin(ii,"ejecutado",e.target.value)}/>
+                </div>
+                {pres>0&&ejec>0&&(
+                  <div style={{minWidth:110,textAlign:"center",paddingTop:16}}>
+                    {balance>0
+                      ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 AHORRO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
+                      :balance<0
+                        ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
+                        :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
+                    }
+                  </div>
+                )}
+              </div>
+              {pres>0&&(
+                <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
+                    <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barColor,borderRadius:4,transition:"width 0.3s"}}/>
+                  </div>
+                  <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {pct.toFixed(1)}%</span>
+                  {pct<=100&&ejec>0&&(
+                    <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-pct).toFixed(1)}%</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {(()=>{
+          const totalPres=financiero.reduce((s,f)=>s+(+f.presupuesto||0),0);
+          const totalEjec=financiero.reduce((s,f)=>s+(+f.ejecutado||0),0);
+          const totalPct=totalPres>0?totalEjec/totalPres*100:0;
+          const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
+          if(!totalPres&&!totalEjec) return null;
+          return (
+            <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:4}}>
+              <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+                <div style={{width:155,color:C.blue,fontWeight:800,fontSize:12,paddingTop:18,flexShrink:0}}>TOTAL GENERAL</div>
+                <div style={{flex:1,minWidth:110}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto total</div>
+                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalPres)}</div>
+                </div>
+                <div style={{flex:1,minWidth:110}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Ejecutado total</div>
+                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalEjec)}</div>
+                </div>
+                <div style={{minWidth:110}}/>
+              </div>
+              <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
+                  <div style={{width:`${Math.min(totalPct,100)}%`,height:"100%",background:barColor,borderRadius:4}}/>
+                </div>
+                <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {totalPct.toFixed(1)}%</span>
+                {totalPct<=100&&totalEjec>0&&(
+                  <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-totalPct).toFixed(1)}%</span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
         <div style={{textAlign:"right",marginTop:10,color:C.blue,fontWeight:700}}>Total período: {fmt(totalGastos)}</div>
       </Card>
 
@@ -984,26 +1054,76 @@ function ReportDetail({report,onBack}){
         </Card>
       ))}
 
-      {report.financiero&&report.financiero.some(f=>f.presupuesto)&&(
-        <Card style={{marginBottom:10,overflowX:"auto"}}>
+      {report.financiero&&report.financiero.some(f=>f.presupuesto||(f.ejecutado!==undefined?f.ejecutado:f.totalEjec))&&(
+        <Card style={{marginBottom:10}}>
           <SectionTitle>Resumen Financiero Global</SectionTitle>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr style={{background:C.blue+"10"}}>
-              {["Ítem","Presup.","Ejec. 21-24","Ejec. 25-26","Total Ejec.","% Ejec.","Por Ejecutar"].map(h=>(
-                <th key={h} style={{padding:"6px 8px",color:C.blue,textAlign:"left",borderBottom:`2px solid ${C.blue}22`}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>{report.financiero.map((f,i)=>(
-              <tr key={i} style={{borderBottom:`1px solid ${C.border}`}}>
-                <td style={{padding:"5px 8px",color:C.blue,fontSize:11}}>{f.item}</td>
-                {["presupuesto","ejec2124","ejec2526","totalEjec"].map(k=>(
-                  <td key={k} style={{padding:"5px 8px",color:C.text}}>{fmt(f[k])}</td>
-                ))}
-                <td style={{padding:"5px 8px",color:+f.pct>=90?C.green:+f.pct>=60?C.warn:C.danger,fontWeight:700}}>{f.pct||"-"}%</td>
-                <td style={{padding:"5px 8px",color:C.text}}>{fmt(f.porEjecutar)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+          {report.financiero.filter(f=>f.presupuesto||(f.ejecutado!==undefined?f.ejecutado:f.totalEjec)).map((f,i)=>{
+            const pres=+f.presupuesto||0;
+            const ejec=f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0;
+            const pct=pres>0?ejec/pres*100:(+f.pct||0);
+            const balance=pres-ejec;
+            const barColor=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
+            return (
+              <div key={i} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+                  <div style={{color:C.blue,fontWeight:700,fontSize:12,flex:1}}>{f.item}</div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:11,color:C.muted}}>Presupuesto: <span style={{color:C.text,fontWeight:600}}>{fmt(pres)}</span></div>
+                    <div style={{fontSize:11,color:C.muted}}>Ejecutado: <span style={{color:C.text,fontWeight:600}}>{fmt(ejec)}</span></div>
+                  </div>
+                  {pres>0&&ejec>0&&(
+                    <div style={{textAlign:"right",minWidth:110}}>
+                      {balance>0
+                        ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 Ahorro: {fmt(balance)}</div>
+                        :balance<0
+                          ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 Sobrecosto: {fmt(Math.abs(balance))}</div>
+                          :<div style={{color:C.muted,fontSize:11}}>En punto</div>
+                      }
+                    </div>
+                  )}
+                </div>
+                {pres>0&&(
+                  <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{flex:1,background:C.border,borderRadius:4,height:6,overflow:"hidden"}}>
+                      <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barColor,borderRadius:4}}/>
+                    </div>
+                    <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {pct.toFixed(1)}%</span>
+                    {pct<=100&&ejec>0&&(
+                      <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-pct).toFixed(1)}%</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {(()=>{
+            const items=report.financiero.filter(f=>f.presupuesto);
+            const totalPres=items.reduce((s,f)=>s+(+f.presupuesto||0),0);
+            const totalEjec=items.reduce((s,f)=>s+(f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0),0);
+            const totalPct=totalPres>0?totalEjec/totalPres*100:0;
+            const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
+            if(!totalPres) return null;
+            return (
+              <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:4}}>
+                <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                  <div style={{color:C.blue,fontWeight:800,fontSize:12}}>TOTAL GENERAL</div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:11,color:C.muted}}>Presupuesto: <span style={{color:C.blue,fontWeight:700}}>{fmt(totalPres)}</span></div>
+                    <div style={{fontSize:11,color:C.muted}}>Ejecutado: <span style={{color:C.blue,fontWeight:700}}>{fmt(totalEjec)}</span></div>
+                  </div>
+                </div>
+                <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{flex:1,background:C.border,borderRadius:4,height:6,overflow:"hidden"}}>
+                    <div style={{width:`${Math.min(totalPct,100)}%`,height:"100%",background:barColor,borderRadius:4}}/>
+                  </div>
+                  <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {totalPct.toFixed(1)}%</span>
+                  {totalPct<=100&&totalEjec>0&&(
+                    <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-totalPct).toFixed(1)}%</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </Card>
       )}
 
@@ -1333,25 +1453,29 @@ export default function App(){
   const [destProject,setDestProject]=useState(PROJECTS[0]);
   const [localOrfanos,setLocalOrfanos]=useState([]);
   const [importando,setImportando]=useState(false);
+  const [loadError,setLoadError]=useState(false);
 
-  useEffect(()=>{
-    (async()=>{
-      const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
-      setReports(r); setDestinatarios(d); setUsuarios(u);
-      // Detectar informes locales (pre-Supabase) que no están en la BD
-      try{
-        const local = JSON.parse(localStorage.getItem("syd-reports")||"[]");
-        if(local.length>0){
-          const enBD = new Set(r.map(x=>String(x.id)));
-          const huerfanos = local.filter(x=>!enBD.has(String(x.id)));
-          if(huerfanos.length>0) setLocalOrfanos(huerfanos);
-        }
-      }catch(e){}
-      const saved = sessionStorage.getItem("syd_usuario");
-      if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
-      setLoading(false);
-    })();
-  },[]);
+  const cargarTodo=async()=>{
+    setLoading(true);
+    setLoadError(false);
+    const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
+    if(r===null){ setLoadError(true); setLoading(false); return; }
+    setReports(r); setDestinatarios(d); setUsuarios(u);
+    // Detectar informes locales (pre-Supabase) que no están en la BD
+    try{
+      const local = JSON.parse(localStorage.getItem("syd-reports")||"[]");
+      if(local.length>0){
+        const enBD = new Set(r.map(x=>String(x.id)));
+        const huerfanos = local.filter(x=>!enBD.has(String(x.id)));
+        if(huerfanos.length>0) setLocalOrfanos(huerfanos);
+      }
+    }catch(e){}
+    const saved = sessionStorage.getItem("syd_usuario");
+    if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ cargarTodo(); },[]);
 
   const recuperarLocales=async()=>{
     setImportando(true);
@@ -1406,6 +1530,22 @@ export default function App(){
   if(loading) return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:C.muted,fontFamily:"'Segoe UI',Arial,sans-serif"}}>Cargando...</div>
+    </div>
+  );
+
+  if(loadError) return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Segoe UI',Arial,sans-serif"}}>
+      <div style={{background:"#fff",border:`2px solid ${C.danger}`,borderRadius:16,padding:32,maxWidth:400,textAlign:"center",boxShadow:"0 4px 24px #0002"}}>
+        <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+        <div style={{color:C.danger,fontWeight:800,fontSize:18,marginBottom:8}}>Error de conexión</div>
+        <div style={{color:C.text,fontSize:14,marginBottom:20,lineHeight:1.6}}>
+          No se pudo conectar con la base de datos. Verifica tu conexión a internet e intenta de nuevo.
+        </div>
+        <button onClick={cargarTodo}
+          style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",cursor:"pointer",fontWeight:700,fontSize:15,boxShadow:`0 3px 12px ${C.blue}44`}}>
+          🔄 Reintentar
+        </button>
+      </div>
     </div>
   );
 
