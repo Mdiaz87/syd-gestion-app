@@ -1459,8 +1459,16 @@ export default function App(){
     setLoading(true);
     setLoadError(false);
     const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
-    if(r===null){ setLoadError(true); setLoading(false); return; }
-    setReports(r); setDestinatarios(d); setUsuarios(u);
+    // Siempre restaurar usuarios y sesión aunque los informes fallen
+    setDestinatarios(d); setUsuarios(u);
+    const saved = sessionStorage.getItem("syd_usuario");
+    if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
+    if(r===null){
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setReports(r);
     // Detectar informes locales (pre-Supabase) que no están en la BD
     try{
       const local = JSON.parse(localStorage.getItem("syd-reports")||"[]");
@@ -1470,8 +1478,6 @@ export default function App(){
         if(huerfanos.length>0) setLocalOrfanos(huerfanos);
       }
     }catch(e){}
-    const saved = sessionStorage.getItem("syd_usuario");
-    if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
     setLoading(false);
   };
 
@@ -1530,22 +1536,6 @@ export default function App(){
   if(loading) return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:C.muted,fontFamily:"'Segoe UI',Arial,sans-serif"}}>Cargando...</div>
-    </div>
-  );
-
-  if(loadError) return (
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Segoe UI',Arial,sans-serif"}}>
-      <div style={{background:"#fff",border:`2px solid ${C.danger}`,borderRadius:16,padding:32,maxWidth:400,textAlign:"center",boxShadow:"0 4px 24px #0002"}}>
-        <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
-        <div style={{color:C.danger,fontWeight:800,fontSize:18,marginBottom:8}}>Error de conexión</div>
-        <div style={{color:C.text,fontSize:14,marginBottom:20,lineHeight:1.6}}>
-          No se pudo conectar con la base de datos. Verifica tu conexión a internet e intenta de nuevo.
-        </div>
-        <button onClick={cargarTodo}
-          style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",cursor:"pointer",fontWeight:700,fontSize:15,boxShadow:`0 3px 12px ${C.blue}44`}}>
-          🔄 Reintentar
-        </button>
-      </div>
     </div>
   );
 
@@ -1615,6 +1605,17 @@ export default function App(){
         {tab==="dashboard"&&<Dashboard reports={reports}/>}
       {tab==="informes"&&!selected&&(
         <div>
+          {loadError&&(
+            <div style={{background:C.danger+"12",border:`1px solid ${C.danger}`,borderRadius:12,padding:14,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{color:C.danger,fontWeight:700,fontSize:14}}>⚠️ Error al cargar los informes</div>
+                <div style={{color:C.text,fontSize:13,marginTop:2}}>No se pudo conectar con la base de datos. Verifica tu internet e intenta de nuevo.</div>
+              </div>
+              <button onClick={cargarTodo} style={{background:C.danger,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",cursor:"pointer",fontWeight:700,fontSize:13,whiteSpace:"nowrap"}}>
+                🔄 Reintentar
+              </button>
+            </div>
+          )}
           {localOrfanos.length>0&&(
             <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:12,padding:16,marginBottom:20}}>
               <div style={{color:C.warn,fontWeight:700,fontSize:14,marginBottom:6}}>
