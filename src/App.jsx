@@ -404,9 +404,12 @@ async function loadReports(){
   return (data || []).map(row => row.data);
 }
 async function saveReport(report, isEdit = false){
+  const sinFotos = JSON.parse(JSON.stringify(report));
+  if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
+  if(sinFotos.frentes) sinFotos.frentes = sinFotos.frentes.map(f=>({...f,photos:[]}));
   const { error } = isEdit
-    ? await supabase.from('reports').update({ data: report }).eq('id', report.id)
-    : await supabase.from('reports').insert({ id: report.id, data: report });
+    ? await supabase.from('reports').update({ data: sinFotos }).eq('id', report.id)
+    : await supabase.from('reports').insert({ id: report.id, data: sinFotos });
   if(error){ console.error('Error guardando informe:', error); return false; }
   return true;
 }
