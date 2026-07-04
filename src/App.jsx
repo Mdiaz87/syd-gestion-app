@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "./supabase.js";
+import { BarChart, Bar as RcBar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from "recharts";
 
 // ── PALETA ────────────────────────────────────────────────────────────────────
 const C = {
@@ -932,6 +933,8 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
         ))}
       </Card>
 
+      <GraficasFinanciero financiero={financiero} tramites={tramites}/>
+
       <Card style={{marginBottom:16}}>
         <SectionTitle>Conclusiones</SectionTitle>
         <textarea style={{...INP,minHeight:80}} value={resumen} onChange={e=>setResumen(e.target.value)} placeholder="Resumen del período, logros, pendientes..."/>
@@ -948,6 +951,99 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
       </button>
 
     </div>
+  );
+}
+
+// ── GRÁFICAS INGENIERO ───────────────────────────────────────────────────────
+function GraficasFinanciero({financiero, tramites}){
+  const finItems=(financiero||[]).filter(f=>+f.presupuesto>0);
+  const tramItems=(tramites||[]).filter(t=>+t.pct>0);
+  if(!finItems.length&&!tramItems.length) return null;
+
+  const getEjec=f=>f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0;
+  const getPct=f=>{const p=+f.presupuesto||0;const e=getEjec(f);return p>0?e/p*100:(+f.pct||0);};
+
+  const SHORT={
+    "Red de Distribución de Agua":"Red Distribución",
+    "Estructuras Hidráulicas":"Estr. Hidráulicas",
+    "Ocupación de Cauce":"Ocup. de Cauce",
+    "Prospección y Exploración de Aguas Subterráneas":"Prosp. Aguas Subt.",
+    "Concesión de Aguas Subterráneas":"Concesión Ag. Subt.",
+  };
+  const sh=s=>SHORT[s]||s;
+
+  const barFinData=finItems.map(f=>{
+    const pct=getPct(f);
+    const ejec=Math.min(Math.round(pct*10)/10,100);
+    return {name:sh(f.item),ejecutado:ejec,porEjecutar:Math.max(0,Math.round((100-pct)*10)/10),pctReal:Math.round(pct*10)/10};
+  });
+
+  const pieData=finItems.map((f,i)=>({
+    name:sh(f.item),value:+f.presupuesto||0,
+    color:['#1b3a6b','#2d5fa6','#f5c400','#3aaa6e','#f5a623'][i%5]
+  })).filter(d=>d.value>0);
+
+  const barTramData=tramItems.map(t=>({name:sh(t.tramite),avance:+t.pct||0}));
+
+  const barColor=p=>p>=90?C.green:p>=60?C.warn:C.danger;
+
+  const PieLabel=({cx,cy,midAngle,innerRadius,outerRadius,percent})=>{
+    if(percent<0.06) return null;
+    const R=Math.PI/180,r=innerRadius+(outerRadius-innerRadius)*0.5;
+    const x=cx+r*Math.cos(-midAngle*R),y=cy+r*Math.sin(-midAngle*R);
+    return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent*100).toFixed(1)}%</text>;
+  };
+
+  return (
+    <Card style={{marginBottom:16}}>
+      <SectionTitle color={C.blue}>📊 Visualización del Avance</SectionTitle>
+
+      {finItems.length>0&&<>
+        <div style={{fontWeight:700,color:C.blue,fontSize:12,marginBottom:8,marginTop:4}}>Ejecución por Ítem (% del presupuesto)</div>
+        <ResponsiveContainer width="100%" height={Math.max(140,finItems.length*44)}>
+          <BarChart data={barFinData} layout="vertical" margin={{left:4,right:48,top:4,bottom:4}}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C.border}/>
+            <XAxis type="number" domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:10,fill:C.muted}}/>
+            <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:C.text}} width={130}/>
+            <RcTooltip formatter={(v,n)=>[`${v}%`,n==='ejecutado'?'Ejecutado':'Por Ejecutar']} labelStyle={{fontWeight:700,color:C.blue}}/>
+            <RcBar dataKey="ejecutado" name="Ejecutado" stackId="s" radius={0}>
+              {barFinData.map((e,i)=><Cell key={i} fill={barColor(e.pctReal)}/>)}
+              <LabelList dataKey="ejecutado" position="right" formatter={v=>`${v}%`} style={{fontSize:10,fontWeight:700,fill:C.text}}/>
+            </RcBar>
+            <RcBar dataKey="porEjecutar" name="Por Ejecutar" stackId="s" fill={C.border} radius={[0,3,3,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+
+        {pieData.length>1&&<>
+          <div style={{fontWeight:700,color:C.blue,fontSize:12,marginBottom:8,marginTop:16}}>Distribución del Presupuesto por Ítem</div>
+          <ResponsiveContainer width="100%" height={230}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="45%" outerRadius={85} dataKey="value" labelLine={false} label={PieLabel}>
+                {pieData.map((e,i)=><Cell key={i} fill={e.color}/>)}
+              </Pie>
+              <Legend iconType="circle" iconSize={10} wrapperStyle={{fontSize:11,paddingTop:8}}/>
+              <RcTooltip formatter={v=>fmt(v)}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </>}
+      </>}
+
+      {barTramData.length>0&&<>
+        <div style={{fontWeight:700,color:C.green,fontSize:12,marginBottom:8,marginTop:finItems.length?16:4}}>Avance Trámites Ambientales</div>
+        <ResponsiveContainer width="100%" height={Math.max(100,barTramData.length*46)}>
+          <BarChart data={barTramData} layout="vertical" margin={{left:4,right:48,top:4,bottom:4}}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C.border}/>
+            <XAxis type="number" domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:10,fill:C.muted}}/>
+            <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:C.text}} width={160}/>
+            <RcTooltip formatter={v=>[`${v}%`,'Avance']}/>
+            <RcBar dataKey="avance" name="Avance" radius={[0,3,3,0]}>
+              {barTramData.map((e,i)=><Cell key={i} fill={e.avance>=100?C.green:e.avance>=50?C.warn:C.danger}/>)}
+              <LabelList dataKey="avance" position="right" formatter={v=>`${v}%`} style={{fontSize:10,fontWeight:700,fill:C.text}}/>
+            </RcBar>
+          </BarChart>
+        </ResponsiveContainer>
+      </>}
+    </Card>
   );
 }
 
@@ -1144,6 +1240,8 @@ function ReportDetail({report,onBack}){
           ))}
         </Card>
       )}
+
+      <GraficasFinanciero financiero={report.financiero} tramites={report.tramites}/>
 
       {report.resumen&&<Card>
         <SectionTitle>Conclusiones</SectionTitle>
