@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { supabase } from "./supabase.js";
 import { BarChart, Bar as RcBar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from "recharts";
 
@@ -70,6 +70,7 @@ const ETAPAS = ["Etapa 1","Etapa 2","Etapa 3","Etapa 4","General"];
 const ROLES = ["Coordinador","Ingeniero","Directivo"];
 const ESTADO_OPTS = ["Aprobado","Pendiente","Rechazado"];
 const ITEMS_FIN = ["Sistema Vial","Estructuras Hidráulicas","Red de Distribución de Agua","Red Eléctrica","Zonas Sociales"];
+const DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 const TRAMITES = ["Ocupación de Cauce","RCD","Prospección y Exploración de Aguas Subterráneas","Concesión de Aguas Subterráneas"];
 
 const FRENTES_MASTER = [
@@ -524,7 +525,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const [project,setProject]=useState(initial?.project||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
-  const [days,setDays]=useState(initial?.days||[emptyDay()]);
+  const [days,setDays]=useState(initial?.days||Array.from({length:7},emptyDay));
   const [resumen,setResumen]=useState(initial?.resumen||"");
   const [sending,setSending]=useState(false);
   const [sent,setSent]=useState(false);
@@ -594,7 +595,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:3,height:14,background:C.green,borderRadius:2}}/>
-              <span style={{color:C.green,fontWeight:700}}>Día {di+1}</span>
+              <span style={{color:C.green,fontWeight:700}}>Día {di+1}{DAY_NAMES[di]?` — ${DAY_NAMES[di]}`:""}</span>
             </div>
             {days.length>1&&<button style={BTN_SM} onClick={()=>rmDay(di)}>✕ Quitar</button>}
           </div>
@@ -644,7 +645,80 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
 
       <Card style={{marginBottom:16}}>
         <SectionTitle>Resumen de la semana</SectionTitle>
-        <textarea style={{...INP,minHeight:80}} value={resumen} onChange={e=>setResumen(e.target.value)} placeholder="Actividades principales, horas máquina totales, conclusiones..."/>
+        {(()=>{
+          const parseH=(ini,fin)=>{
+            if(!ini||!fin) return 0;
+            const [hI,mI]=ini.split(':').map(Number);
+            const [hF,mF]=fin.split(':').map(Number);
+            return Math.max(0,(hF*60+mF-hI*60-mI)/60);
+          };
+          const fmtH=h=>Number.isInteger(h)?`${h} h`:`${h.toFixed(1)} h`;
+
+          // ── equipos ──
+          const equipos={};
+          days.forEach((day,di)=>{
+            const hDia=parseH(day.inicioJornada,day.finJornada);
+            day.activities.forEach(act=>{
+              const equipo=act.equipo==="Otro"?act.equipoOtro:act.equipo;
+              if(!equipo) return;
+              const personal=act.personal==="Otro"?act.personalOtro:act.personal;
+              if(!equipos[equipo]) equipos[equipo]={horas:0,dias:new Set(),personal:new Set()};
+              if(!equipos[equipo].dias.has(di)){
+                equipos[equipo].horas+=hDia;
+                equipos[equipo].dias.add(di);
+              }
+              if(personal) equipos[equipo].personal.add(personal);
+            });
+          });
+
+          // ── actividades ──
+          const actMap={};
+          days.forEach(day=>{
+            day.activities.forEach(act=>{
+              const nombre=act.actividad==="Otro"?act.actividadOtro:act.actividad;
+              const cant=+act.cantidad||0;
+              if(!nombre||!cant) return;
+              const unidad=act.unidad==="Otro"?act.unidadOtro:act.unidad;
+              const key=`${nombre}||${act.etapa}||${unidad}`;
+              if(!actMap[key]) actMap[key]={nombre,etapa:act.etapa,unidad,total:0};
+              actMap[key].total+=cant;
+            });
+          });
+
+          const eqList=Object.entries(equipos);
+          const acList=Object.values(actMap);
+          if(!eqList.length&&!acList.length) return null;
+
+          return (
+            <div style={{background:C.bgCard2,border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
+              {eqList.length>0&&<>
+                <div style={{color:C.blue,fontWeight:700,fontSize:12,marginBottom:8}}>🚜 Equipos utilizados esta semana</div>
+                {eqList.map(([equipo,{horas,dias,personal}])=>(
+                  <div key={equipo} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:4}}>
+                    <span style={{color:C.text,fontWeight:600,fontSize:13}}>{equipo}</span>
+                    <span style={{color:C.muted,fontSize:12,textAlign:"right"}}>
+                      {fmtH(horas)} · {dias.size} día{dias.size!==1?"s":""}
+                      {personal.size>0&&<span style={{marginLeft:8,color:C.blueMid}}>· Personal: {[...personal].join(", ")}</span>}
+                    </span>
+                  </div>
+                ))}
+              </>}
+              {acList.length>0&&<>
+                <div style={{color:C.blue,fontWeight:700,fontSize:12,marginBottom:8,marginTop:eqList.length?12:0}}>📋 Actividades realizadas esta semana</div>
+                {acList.map(({nombre,etapa,unidad,total})=>(
+                  <div key={`${nombre}${etapa}`} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:4}}>
+                    <span style={{color:C.text,fontWeight:600,fontSize:13}}>{nombre}</span>
+                    <span style={{color:C.muted,fontSize:12}}>
+                      {total} {unidad}{etapa&&<span style={{color:C.blueMid,marginLeft:8}}>({etapa})</span>}
+                    </span>
+                  </div>
+                ))}
+              </>}
+            </div>
+          );
+        })()}
+        <label style={{color:C.muted,fontSize:12}}>Observaciones adicionales</label>
+        <textarea style={{...INP,minHeight:70}} value={resumen} onChange={e=>setResumen(e.target.value)} placeholder="Conclusiones, pendientes, notas adicionales..."/>
       </Card>
 
       {sent&&(
