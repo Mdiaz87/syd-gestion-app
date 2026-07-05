@@ -664,27 +664,20 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
       <Card style={{marginBottom:16}}>
         <SectionTitle>Resumen de la semana</SectionTitle>
         {(()=>{
-          const parseH=(ini,fin)=>{
-            if(!ini||!fin) return 0;
-            const [hI,mI]=ini.split(':').map(Number);
-            const [hF,mF]=fin.split(':').map(Number);
-            return Math.max(0,(hF*60+mF-hI*60-mI)/60);
-          };
           const fmtH=h=>Number.isInteger(h)?`${h} h`:`${h.toFixed(1)} h`;
 
           // ── equipos ──
           const equipos={};
           days.forEach((day,di)=>{
-            const hDia=parseH(day.inicioJornada,day.finJornada);
             day.activities.forEach(act=>{
               const equipo=act.equipo==="Otro"?act.equipoOtro:act.equipo;
               if(!equipo) return;
               const personal=act.personal==="Otro"?act.personalOtro:act.personal;
+              const cant=+act.cantidad||0;
+              const unidad=act.unidad==="Otro"?act.unidadOtro:act.unidad;
               if(!equipos[equipo]) equipos[equipo]={horas:0,dias:new Set(),personal:new Set()};
-              if(!equipos[equipo].dias.has(di)){
-                equipos[equipo].horas+=hDia;
-                equipos[equipo].dias.add(di);
-              }
+              if(unidad==="horas"&&cant>0) equipos[equipo].horas+=cant;
+              equipos[equipo].dias.add(di);
               if(personal) equipos[equipo].personal.add(personal);
             });
           });
@@ -715,7 +708,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
                   <div key={equipo} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",gap:4}}>
                     <span style={{color:C.text,fontWeight:600,fontSize:13}}>{equipo}</span>
                     <span style={{color:C.muted,fontSize:12,textAlign:"right"}}>
-                      {fmtH(horas)} · {dias.size} día{dias.size!==1?"s":""}
+                      {horas>0&&`${fmtH(horas)} · `}{dias.size} día{dias.size!==1?"s":""}
                       {personal.size>0&&<span style={{marginLeft:8,color:C.blueMid}}>· Personal: {[...personal].join(", ")}</span>}
                     </span>
                   </div>
