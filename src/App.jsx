@@ -73,6 +73,15 @@ const ITEMS_FIN = ["Sistema Vial","Estructuras Hidráulicas","Red de Distribuci�
 const DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 const TRAMITES = ["Ocupación de Cauce","RCD","Prospección y Exploración de Aguas Subterráneas","Concesión de Aguas Subterráneas"];
 
+function getMondayStr(){
+  const d=new Date();
+  const day=d.getDay();
+  const diff=day===0?-6:1-day;
+  const m=new Date(d);
+  m.setDate(d.getDate()+diff);
+  return m.toISOString().slice(0,10);
+}
+
 const FRENTES_MASTER = [
   "Sistema Vial","Vías Externas","Movimiento de Tierras / Relleno y Corte","Limpieza y Descapote / Mantenimiento",
   "Redes de Agua","Red Eléctrica / Acometidas","Red de Gas Natural","Estructuras Hidráulicas / Bordillos",
@@ -540,36 +549,45 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const addPh=(di,urls)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:[...d.photos,...urls].slice(0,6)}));
   const rmPh=(di,pi)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:d.photos.filter((_,k)=>k!==pi)}));
 
-  const doSubmit=async()=>{
+  const doSubmit=async(enviar=false)=>{
     setSending(true);
     const now=new Date().toISOString();
+    const semana=initial?.semana||getMondayStr();
     const baseReport={
       id: initial?.id || Date.now(),
-      type:"semanal",role:"Coordinador",project,author,avanceObra:+avObra,avanceRecursos:0,
-      date:days[0]?.date||new Date().toISOString().slice(0,10),days,resumen,
+      type:"semanal",role:"Coordinador",project,author,
+      coordinadorId:usuario.id,
+      avanceObra:+avObra,avanceRecursos:0,
+      date:days[0]?.date||new Date().toISOString().slice(0,10),
+      semana,
+      estado:enviar?"enviado":"borrador",
+      days,resumen,
       activities:days.map(d=>d.activities.map(a=>a.actividad==="Otro"?a.actividadOtro:a.actividad).filter(Boolean).join(", ")).join(" | "),
       novelties:days.map(d=>d.novelties).filter(Boolean).join(" | ")||"Sin novedades",
     };
     let history = initial?.history || [{accion:"Creado",por:author,uid:usuario.id,fecha:initial?.createdAt||now}];
-    if(editingReport){
-      history=[...history,{accion:"Editado",por:usuario.nombre,uid:usuario.id,fecha:now}];
+    if(initial){
+      history=[...history,{accion:enviar?"Enviado":"Guardado",por:usuario.nombre,uid:usuario.id,fecha:now}];
     }
     const report={...baseReport, createdAt: initial?.createdAt||now, history};
-    await onSubmit(report, !!editingReport);
+    await onSubmit(report, !!initial);
     setSending(false);
-    setSent(true);
+    setSent(enviar?"enviado":"borrador");
     setTimeout(()=>setSent(false),3000);
   };
 
-  const handleClick=()=>{ doSubmit(); };
-
   return (
     <div>
-      {editingReport&&(
-        <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{color:C.warn,fontWeight:600,fontSize:13}}>✏️ Editando informe del {editingReport.date} — {editingReport.project}</span>
-          <button onClick={onCancelEdit} style={{...BTN_SM,padding:"4px 10px"}}>Cancelar edición</button>
-        </div>
+      {initial&&(
+        initial.estado==="borrador"
+          ? <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{color:C.green,fontWeight:600,fontSize:13}}>📝 Continuando informe de la semana del {initial.semana} — {initial.project}</span>
+              {onCancelEdit&&<button onClick={onCancelEdit} style={{...BTN_SM,padding:"4px 10px"}}>Cancelar</button>}
+            </div>
+          : <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{color:C.warn,fontWeight:600,fontSize:13}}>✏️ Editando informe del {initial.date} — {initial.project}</span>
+              {onCancelEdit&&<button onClick={onCancelEdit} style={{...BTN_SM,padding:"4px 10px"}}>Cancelar edición</button>}
+            </div>
       )}
       <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>{editingReport?"Editar Informe":"Informe Semanal"} <span style={{color:C.green,fontWeight:400,fontSize:15}}>Coordinador</span></h2>
       <Card style={{marginBottom:16}}>
@@ -722,14 +740,27 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
       </Card>
 
       {sent&&(
-        <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:14,marginBottom:14,color:C.green,fontWeight:700,textAlign:"center"}}>
-          ✅ {editingReport?"Cambios guardados":"Informe enviado"} correctamente
+        <div style={{background:sent==="enviado"?C.green+"18":C.blue+"12",border:`1px solid ${sent==="enviado"?C.green:C.blue}`,borderRadius:10,padding:14,marginBottom:14,color:sent==="enviado"?C.green:C.blue,fontWeight:700,textAlign:"center"}}>
+          {sent==="enviado"?"✅ Informe de la semana enviado y cerrado correctamente":"💾 Progreso guardado correctamente"}
         </div>
       )}
-      <button onClick={handleClick} disabled={sending||sent}
-        style={{background:sending||sent?C.border:C.green,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",width:"100%",boxShadow:sending||sent?"none":`0 3px 12px ${C.green}55`}}>
-        {sending?"Guardando...":sent?"✅ Enviado":editingReport?"Guardar Cambios":"Enviar Informe"}
-      </button>
+      {initial?.estado==="enviado"&&!sent&&(
+        <div style={{background:C.green+"12",border:`1px solid ${C.green}`,borderRadius:10,padding:12,marginBottom:14,color:C.green,fontWeight:600,textAlign:"center",fontSize:13}}>
+          ✅ Este informe ya fue enviado y está cerrado.
+        </div>
+      )}
+      {initial?.estado!=="enviado"&&(
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>doSubmit(false)} disabled={sending||!!sent}
+            style={{flex:1,background:sending||sent?C.border:C.bgCard2,color:sending||sent?C.muted:C.blueMid,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:13,fontSize:14,cursor:sending||sent?"default":"pointer"}}>
+            {sending?"Guardando...":"💾 Guardar progreso"}
+          </button>
+          <button onClick={()=>doSubmit(true)} disabled={sending||!!sent}
+            style={{flex:2,background:sending||sent?C.border:C.green,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.green}55`}}>
+            {sending?"Guardando...":"✅ Enviar Informe de la Semana"}
+          </button>
+        </div>
+      )}
 
     </div>
   );
@@ -1346,9 +1377,12 @@ function ReportList({reports,onSelect,onEdit,onDelete}){
       {[...reports].reverse().map(r=>(
         <div key={r.id} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderLeft:`4px solid ${TC[r.type]||C.muted}`,borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px #0001"}}>
           <div onClick={()=>onSelect(r)} style={{cursor:"pointer"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
               <span style={{color:C.blue,fontWeight:700}}>{r.project}</span>
-              <span style={{background:(TC[r.type]||C.muted)+"18",color:TC[r.type]||C.muted,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:700,textTransform:"capitalize",border:`1px solid ${(TC[r.type]||C.muted)}44`}}>{r.type}</span>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                {r.estado==="borrador"&&<span style={{background:C.warn+"22",color:C.warn,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${C.warn}44`}}>En progreso</span>}
+                <span style={{background:(TC[r.type]||C.muted)+"18",color:TC[r.type]||C.muted,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:700,textTransform:"capitalize",border:`1px solid ${(TC[r.type]||C.muted)}44`}}>{r.type}</span>
+              </div>
             </div>
             <div style={{color:C.muted,fontSize:13,marginTop:4}}>{r.author}{r.mes?` — ${r.mes}`:""} · {r.date}</div>
             <div style={{color:C.muted,fontSize:12,marginTop:4}}>{r.activities?.slice(0,80)}</div>
@@ -1630,6 +1664,17 @@ export default function App(){
   const [importando,setImportando]=useState(false);
   const [loadError,setLoadError]=useState(false);
 
+  const borradorSemana=useMemo(()=>{
+    if(!usuario||usuario.rol!=="Coordinador") return null;
+    const semana=getMondayStr();
+    return reports.find(r=>
+      r.role==="Coordinador"&&
+      r.coordinadorId===usuario.id&&
+      r.semana===semana&&
+      r.estado==="borrador"
+    )||null;
+  },[reports,usuario]);
+
   const cargarTodo=async()=>{
     setLoading(true);
     setLoadError(false);
@@ -1825,7 +1870,7 @@ export default function App(){
         </div>
       )}
         {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)}/>}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
           <div>
