@@ -321,13 +321,17 @@ async function enviarADrive(report){
 
     const proy = (report.project||'').replace(/[\s/]/g,'_');
     const aut  = (report.author||'').replace(/\s/g,'_');
-    const fileName = `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
+    // Informe semanal de Coordinador: nombre fijo por semana para que la edición reemplace el archivo en Drive
+    const fileName = (report.role==="Coordinador"&&report.semana)
+      ? `Informe_Semanal_${proy}_${report.semana}_${aut}.pdf`
+      : `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
+    const isEdit = report.estado==="enviado" && (report.history||[]).some(h=>h.accion==="Editado");
 
     await fetch(GAS_URL, {
       method:'POST',
       mode:'no-cors',
       headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type})
+      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type, isEdit})
     });
     return true;
   }catch(e){
@@ -549,10 +553,12 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const addPh=(di,urls)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:[...d.photos,...urls].slice(0,6)}));
   const rmPh=(di,pi)=>setDays(ds=>ds.map((d,j)=>j!==di?d:{...d,photos:d.photos.filter((_,k)=>k!==pi)}));
 
-  const doSubmit=async(enviar=false)=>{
+  // modo: "borrador" | "enviado" | "edicion"
+  const doSubmit=async(modo="borrador")=>{
     setSending(true);
     const now=new Date().toISOString();
     const semana=initial?.semana||getMondayStr();
+    const nuevoEstado=modo==="borrador"?"borrador":"enviado";
     const baseReport={
       id: initial?.id || Date.now(),
       type:"semanal",role:"Coordinador",project,author,
@@ -560,19 +566,20 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
       avanceObra:+avObra,avanceRecursos:0,
       date:days[0]?.date||new Date().toISOString().slice(0,10),
       semana,
-      estado:enviar?"enviado":"borrador",
+      estado:nuevoEstado,
       days,resumen,
       activities:days.map(d=>d.activities.map(a=>a.actividad==="Otro"?a.actividadOtro:a.actividad).filter(Boolean).join(", ")).join(" | "),
       novelties:days.map(d=>d.novelties).filter(Boolean).join(" | ")||"Sin novedades",
     };
+    const accionHist=modo==="enviado"?"Enviado":modo==="edicion"?"Editado":"Guardado";
     let history = initial?.history || [{accion:"Creado",por:author,uid:usuario.id,fecha:initial?.createdAt||now}];
     if(initial){
-      history=[...history,{accion:enviar?"Enviado":"Guardado",por:usuario.nombre,uid:usuario.id,fecha:now}];
+      history=[...history,{accion:accionHist,por:usuario.nombre,uid:usuario.id,fecha:now}];
     }
     const report={...baseReport, createdAt: initial?.createdAt||now, history};
     await onSubmit(report, !!initial);
     setSending(false);
-    setSent(enviar?"enviado":"borrador");
+    setSent(modo);
     setTimeout(()=>setSent(false),3000);
   };
 
@@ -733,22 +740,23 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
       </Card>
 
       {sent&&(
-        <div style={{background:sent==="enviado"?C.green+"18":C.blue+"12",border:`1px solid ${sent==="enviado"?C.green:C.blue}`,borderRadius:10,padding:14,marginBottom:14,color:sent==="enviado"?C.green:C.blue,fontWeight:700,textAlign:"center"}}>
-          {sent==="enviado"?"✅ Informe de la semana enviado y cerrado correctamente":"💾 Progreso guardado correctamente"}
+        <div style={{background:sent==="enviado"?C.green+"18":sent==="edicion"?C.blue+"12":C.blue+"12",border:`1px solid ${sent==="enviado"?C.green:C.blue}`,borderRadius:10,padding:14,marginBottom:14,color:sent==="enviado"?C.green:C.blue,fontWeight:700,textAlign:"center"}}>
+          {sent==="enviado"?"✅ Informe de la semana enviado y cerrado correctamente":sent==="edicion"?"✅ Edición guardada correctamente":"💾 Progreso guardado correctamente"}
         </div>
       )}
-      {initial?.estado==="enviado"&&!sent&&(
-        <div style={{background:C.green+"12",border:`1px solid ${C.green}`,borderRadius:10,padding:12,marginBottom:14,color:C.green,fontWeight:600,textAlign:"center",fontSize:13}}>
-          ✅ Este informe ya fue enviado y está cerrado.
-        </div>
+      {initial?.estado==="enviado"&&(
+        <button onClick={()=>doSubmit("edicion")} disabled={sending||!!sent}
+          style={{width:"100%",background:sending||sent?C.border:C.blueMid,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.blueMid}55`}}>
+          {sending?"Guardando...":"✏️ Guardar Edición"}
+        </button>
       )}
       {initial?.estado!=="enviado"&&(
         <div style={{display:"flex",gap:10}}>
-          <button onClick={()=>doSubmit(false)} disabled={sending||!!sent}
+          <button onClick={()=>doSubmit("borrador")} disabled={sending||!!sent}
             style={{flex:1,background:sending||sent?C.border:C.bgCard2,color:sending||sent?C.muted:C.blueMid,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:13,fontSize:14,cursor:sending||sent?"default":"pointer"}}>
             {sending?"Guardando...":"💾 Guardar progreso"}
           </button>
-          <button onClick={()=>doSubmit(true)} disabled={sending||!!sent}
+          <button onClick={()=>doSubmit("enviado")} disabled={sending||!!sent}
             style={{flex:2,background:sending||sent?C.border:C.green,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.green}55`}}>
             {sending?"Guardando...":"✅ Enviar Informe de la Semana"}
           </button>
@@ -1154,7 +1162,7 @@ function verImprimirInforme(report){
   setTimeout(()=>w.print(), 800);
 }
 
-function ReportDetail({report,onBack}){
+function ReportDetail({report,onBack,usuario}){
   const efic=(report.avanceObra||0)-(report.avanceRecursos||0);
   const st=semaforo(report.avanceObra,report.avanceRecursos,null,null,null,null);
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
@@ -1346,17 +1354,53 @@ function ReportDetail({report,onBack}){
         <div style={{color:C.text,fontSize:13}}>{report.resumen}</div>
       </Card>}
 
-      {report.history&&report.history.length>0&&(
-        <Card style={{marginTop:10,background:C.bgCard2}}>
-          <SectionTitle color={C.muted}>Historial del Informe</SectionTitle>
-          {report.history.map((h,hi)=>(
-            <div key={hi} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:hi<report.history.length-1?`1px solid ${C.border}`:"none"}}>
-              <span style={{color:h.accion==="Creado"?C.green:C.warn,fontWeight:600}}>{h.accion==="Creado"?"🆕":"✏️"} {h.accion} por {h.por}{h.uid&&<span title="Identidad verificada por login" style={{marginLeft:4,fontSize:10}}>🔒</span>}</span>
-              <span style={{color:C.muted}}>{new Date(h.fecha).toLocaleString("es-CO")}</span>
+      {report.history&&report.history.length>0&&(()=>{
+        const ediciones=(report.history||[]).filter(h=>h.accion==="Editado");
+        const ultima=ediciones[ediciones.length-1];
+        const fmtFecha=f=>{try{return new Date(f).toLocaleString("es-CO",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch{return f;}};
+        const accionIcon=a=>a==="Creado"?"🆕":a==="Enviado"?"✅":a==="Editado"?"✏️":"💾";
+        const accionColor=a=>a==="Creado"?C.green:a==="Enviado"?C.blue:a==="Editado"?C.warn:C.muted;
+        if(usuario?.rol==="Directivo"){
+          return (
+            <Card style={{marginTop:10,background:C.bgCard2,border:`1px solid ${C.warn}44`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <SectionTitle color={C.warn}>📋 Auditoría del Informe</SectionTitle>
+                {ediciones.length>0&&<span style={{background:C.warn+"22",color:C.warn,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:700,border:`1px solid ${C.warn}55`}}>Editado {ediciones.length} {ediciones.length===1?"vez":"veces"}</span>}
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{borderBottom:`2px solid ${C.border}`}}>
+                      {["Acción","Quién","Fecha y hora"].map(h=><th key={h} style={{textAlign:"left",color:C.muted,fontWeight:700,padding:"4px 8px",whiteSpace:"nowrap"}}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.history.map((h,hi)=>(
+                      <tr key={hi} style={{borderBottom:`1px solid ${C.border}`,background:h.accion==="Editado"?C.warn+"0a":"transparent"}}>
+                        <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
+                          <span style={{color:accionColor(h.accion),fontWeight:600}}>{accionIcon(h.accion)} {h.accion}</span>
+                        </td>
+                        <td style={{padding:"6px 8px",color:C.text}}>
+                          {h.por}{h.uid&&<span title="Verificado" style={{marginLeft:4,fontSize:10,color:C.muted}}>🔒</span>}
+                        </td>
+                        <td style={{padding:"6px 8px",color:C.muted,whiteSpace:"nowrap"}}>{fmtFecha(h.fecha)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          );
+        }
+        if(ultima){
+          return (
+            <div style={{color:C.muted,fontSize:12,textAlign:"right",marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+              ✏️ Editado {ediciones.length} {ediciones.length===1?"vez":"veces"} · Última edición: {fmtFecha(ultima.fecha)} por {ultima.por}
             </div>
-          ))}
-        </Card>
-      )}
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 }
@@ -1862,7 +1906,7 @@ export default function App(){
           <ReportList reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport}/>
         </div>
       )}
-        {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)}/>}
+        {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
