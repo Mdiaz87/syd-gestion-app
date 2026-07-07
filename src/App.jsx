@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { supabase } from "./supabase.js";
 import { BarChart, Bar as RcBar, XAxis, YAxis, CartesianGrid, Tooltip as RcTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from "recharts";
 
