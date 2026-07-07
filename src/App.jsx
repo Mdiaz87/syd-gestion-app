@@ -1206,20 +1206,21 @@ function GraficasFinanciero({financiero, tramites, cumAnterior}){
   };
   const sh=s=>SHORT[s]||s;
 
-  const barFinData=finItems.map(f=>{
+  const PALETTE=['#1b3a6b','#2d5fa6','#f5c400','#3aaa6e','#f5a623','#8b5cf6','#06b6d4','#ec4899'];
+  const TRAM_PALETTE=['#1b3a6b','#3aaa6e','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#2d5fa6','#0ea5e9'];
+
+  const barFinData=finItems.map((f,i)=>{
     const pct=getPct(f);
     const ejec=Math.min(Math.round(pct*10)/10,100);
-    return {name:sh(f.item),ejecutado:ejec,porEjecutar:Math.max(0,Math.round((100-pct)*10)/10),pctReal:Math.round(pct*10)/10};
+    return {name:sh(f.item),ejecutado:ejec,porEjecutar:Math.max(0,Math.round((100-pct)*10)/10),pctReal:Math.round(pct*10)/10,color:PALETTE[i%PALETTE.length]};
   });
 
   const pieData=finItems.map((f,i)=>({
     name:sh(f.item),value:+f.presupuesto||0,
-    color:['#1b3a6b','#2d5fa6','#f5c400','#3aaa6e','#f5a623'][i%5]
+    color:PALETTE[i%PALETTE.length]
   })).filter(d=>d.value>0);
 
-  const barTramData=tramItems.map(t=>({name:sh(t.tramite),avance:+t.pct||0}));
-
-  const barColor=p=>p>=90?C.green:p>=60?C.warn:C.danger;
+  const barTramData=tramItems.map((t,i)=>({name:sh(t.tramite),avance:+t.pct||0,color:TRAM_PALETTE[i%TRAM_PALETTE.length]}));
 
   const PieLabel=({cx,cy,midAngle,innerRadius,outerRadius,percent})=>{
     if(percent<0.06) return null;
@@ -1228,6 +1229,22 @@ function GraficasFinanciero({financiero, tramites, cumAnterior}){
     return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent*100).toFixed(1)}%</text>;
   };
 
+  // Resúmenes automáticos
+  const resumenBar=(()=>{
+    if(!barFinData.length) return null;
+    const avg=barFinData.reduce((s,d)=>s+d.pctReal,0)/barFinData.length;
+    const best=barFinData.reduce((a,b)=>a.pctReal>b.pctReal?a:b);
+    const worst=barFinData.reduce((a,b)=>a.pctReal<b.pctReal?a:b);
+    return {avg:avg.toFixed(1),best,worst};
+  })();
+
+  const resumenPie=(()=>{
+    if(!pieData.length) return null;
+    const total=pieData.reduce((s,d)=>s+d.value,0);
+    const top=pieData.reduce((a,b)=>a.value>b.value?a:b);
+    return {total,top,pct:total>0?(top.value/total*100).toFixed(1):0};
+  })();
+
   return (
     <Card style={{marginBottom:16}}>
       <SectionTitle color={C.blue}>📊 Visualización del Avance</SectionTitle>
@@ -1235,18 +1252,25 @@ function GraficasFinanciero({financiero, tramites, cumAnterior}){
       {finItems.length>0&&<>
         <div style={{fontWeight:700,color:C.blue,fontSize:12,marginBottom:8,marginTop:4}}>Ejecución por Ítem (% del presupuesto)</div>
         <ResponsiveContainer width="100%" height={Math.max(140,finItems.length*44)}>
-          <BarChart data={barFinData} layout="vertical" margin={{left:4,right:48,top:4,bottom:4}}>
+          <BarChart data={barFinData} layout="vertical" margin={{left:4,right:52,top:4,bottom:4}}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C.border}/>
             <XAxis type="number" domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:10,fill:C.muted}}/>
             <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:C.text}} width={130}/>
             <RcTooltip formatter={(v,n)=>[`${v}%`,n==='ejecutado'?'Ejecutado':'Por Ejecutar']} labelStyle={{fontWeight:700,color:C.blue}}/>
-            <RcBar dataKey="ejecutado" name="Ejecutado" stackId="s" radius={0}>
-              {barFinData.map((e,i)=><Cell key={i} fill={barColor(e.pctReal)}/>)}
+            <RcBar dataKey="ejecutado" name="Ejecutado" stackId="s" radius={[4,0,0,4]}>
+              {barFinData.map((e,i)=><Cell key={i} fill={e.color}/>)}
               <LabelList dataKey="ejecutado" position="right" formatter={v=>`${v}%`} style={{fontSize:10,fontWeight:700,fill:C.text}}/>
             </RcBar>
-            <RcBar dataKey="porEjecutar" name="Por Ejecutar" stackId="s" fill={C.border} radius={[0,3,3,0]}/>
+            <RcBar dataKey="porEjecutar" name="Por Ejecutar" stackId="s" fill={C.border} radius={[0,4,4,0]}/>
           </BarChart>
         </ResponsiveContainer>
+        {resumenBar&&(
+          <div style={{fontSize:11,color:C.muted,marginTop:8,padding:"6px 10px",background:C.bgCard2,borderRadius:8,lineHeight:1.6}}>
+            📌 Promedio de ejecución: <b style={{color:C.blue}}>{resumenBar.avg}%</b>
+            {" · "}Más avanzado: <b style={{color:C.green}}>{resumenBar.best.name} ({resumenBar.best.pctReal}%)</b>
+            {" · "}Más rezagado: <b style={{color:C.warn}}>{resumenBar.worst.name} ({resumenBar.worst.pctReal}%)</b>
+          </div>
+        )}
 
         {pieData.length>1&&<>
           <div style={{fontWeight:700,color:C.blue,fontSize:12,marginBottom:8,marginTop:16}}>Distribución del Presupuesto por Ítem</div>
@@ -1259,19 +1283,25 @@ function GraficasFinanciero({financiero, tramites, cumAnterior}){
               <RcTooltip formatter={v=>fmt(v)}/>
             </PieChart>
           </ResponsiveContainer>
+          {resumenPie&&(
+            <div style={{fontSize:11,color:C.muted,marginTop:4,padding:"6px 10px",background:C.bgCard2,borderRadius:8}}>
+              💰 Presupuesto total: <b style={{color:C.blue}}>{fmt(resumenPie.total)}</b>
+              {" · "}Mayor participación: <b style={{color:C.blue}}>{resumenPie.top.name} ({resumenPie.pct}%)</b>
+            </div>
+          )}
         </>}
       </>}
 
       {barTramData.length>0&&<>
         <div style={{fontWeight:700,color:C.green,fontSize:12,marginBottom:8,marginTop:finItems.length?16:4}}>Avance Trámites Ambientales</div>
         <ResponsiveContainer width="100%" height={Math.max(100,barTramData.length*46)}>
-          <BarChart data={barTramData} layout="vertical" margin={{left:4,right:48,top:4,bottom:4}}>
+          <BarChart data={barTramData} layout="vertical" margin={{left:4,right:52,top:4,bottom:4}}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C.border}/>
             <XAxis type="number" domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:10,fill:C.muted}}/>
             <YAxis type="category" dataKey="name" tick={{fontSize:10,fill:C.text}} width={160}/>
             <RcTooltip formatter={v=>[`${v}%`,'Avance']}/>
-            <RcBar dataKey="avance" name="Avance" radius={[0,3,3,0]}>
-              {barTramData.map((e,i)=><Cell key={i} fill={e.avance>=100?C.green:e.avance>=50?C.warn:C.danger}/>)}
+            <RcBar dataKey="avance" name="Avance" radius={[4,4,4,4]}>
+              {barTramData.map((e,i)=><Cell key={i} fill={e.color}/>)}
               <LabelList dataKey="avance" position="right" formatter={v=>`${v}%`} style={{fontSize:10,fontWeight:700,fill:C.text}}/>
             </RcBar>
           </BarChart>
