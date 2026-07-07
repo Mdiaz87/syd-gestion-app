@@ -1144,7 +1144,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
         ))}
       </Card>
 
-      <GraficasFinanciero financiero={financiero} tramites={tramites}/>
+      <GraficasFinanciero financiero={financiero} tramites={tramites} cumAnterior={cumAnterior}/>
 
       <Card style={{marginBottom:16}}>
         <SectionTitle>Conclusiones</SectionTitle>
@@ -1166,13 +1166,16 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
 }
 
 // ── GRÁFICAS INGENIERO ───────────────────────────────────────────────────────
-function GraficasFinanciero({financiero, tramites}){
+function GraficasFinanciero({financiero, tramites, cumAnterior}){
   const finItems=(financiero||[]).filter(f=>+f.presupuesto>0);
   const tramItems=(tramites||[]).filter(t=>+t.pct>0);
   if(!finItems.length&&!tramItems.length) return null;
 
-  const getEjec=f=>f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0;
-  const getPct=f=>{const p=+f.presupuesto||0;const e=getEjec(f);return p>0?e/p*100:(+f.pct||0);};
+  const getEjec=f=>{
+    const periodo=f.ejecutado!==undefined?+f.ejecutado||0:+f.totalEjec||0;
+    return cumAnterior?((cumAnterior[f.item]||0)+periodo):periodo;
+  };
+  const getPct=f=>{const p=+f.presupuesto||0;const e=getEjec(f);return p>0?e/p*100:0;};
 
   const SHORT={
     "Red de Distribución de Agua":"Red Distribución",
