@@ -69,7 +69,8 @@ const OPERADORES_OPTS = ["1 Operador","2 Operadores","3 Operadores","4 Operadore
 const ETAPAS = ["Etapa 1","Etapa 2","Etapa 3","Etapa 4","General"];
 const ROLES = ["Coordinador","Ingeniero","Directivo"];
 const ESTADO_OPTS = ["Aprobado","Pendiente","Rechazado"];
-const ITEMS_FIN = ["Sistema Vial","Estructuras Hidráulicas","Red de Distribución de Agua","Red Eléctrica","Zonas Sociales"];
+const ITEMS_PREOP=["Limpieza y descapote","Levantamiento topográfico","Estudios ambientales","Estudio hidrológico y diseño hidráulico","Diseño arquitectónico","Diseño eléctrico","Diseño de vías"];
+const ITEMS_OP=["Sistema Vial","Estructuras Hidráulicas","Red de Distribución de Agua","Red Eléctrica","Zonas Sociales","Movimiento de tierras","Drenaje de aguas lluvias","Portería"];
 const DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 const TRAMITES = ["Ocupación de Cauce","RCD","Prospección y Exploración de Aguas Subterráneas","Concesión de Aguas Subterráneas"];
 
@@ -470,7 +471,8 @@ async function savePresupuestoProyecto(project, items){
     project,
     categoria: it.item,
     presupuesto: +it.presupuesto || 0,
-    is_custom: !!it.isCustom
+    is_custom: !!it.isCustom,
+    fase: it.fase||"operativa"
   }));
   if(!rows.length) return true;
   const { error } = await supabase.from('presupuesto_proyecto').upsert(rows, {onConflict:'project,categoria'});
@@ -488,7 +490,10 @@ const emptyAct = () => ({id:Date.now()+Math.random(),actividad:"",actividadOtro:
 const emptyDay=()=>({id:Date.now()+Math.random(),date:"",climaPrincipal:"Soleado",inicioJornada:"7:30",finJornada:"16:30",activities:[emptyAct()],novelties:"",photos:[]});
 const emptyGasto=()=>({id:Date.now()+Math.random(),proveedor:"",estado:"Aprobado",descripcion:"",valor:"",centroCosto:""});
 const emptyFrente=(nombre)=>({id:Date.now()+Math.random(),nombre:nombre||"Otro",descripcion:"",gastos:[emptyGasto()],photos:[],lotesData:null});
-const emptyFinanciero=()=>ITEMS_FIN.map(item=>({item,presupuesto:"",ejecutado:""}));
+const emptyFinanciero=()=>[
+  ...ITEMS_PREOP.map(item=>({item,presupuesto:"",ejecutado:"",fase:"pre_operativa"})),
+  ...ITEMS_OP.map(item=>({item,presupuesto:"",ejecutado:"",fase:"operativa"})),
+];
 const emptyTramite=()=>TRAMITES.map(t=>({tramite:t,pct:""}));
 
 function PhotoUpload({photos,onAdd,onRemove}){
@@ -845,35 +850,27 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
     if(initial) return;
     loadPresupuestoProyecto(project).then(cats=>{
       if(!cats||!cats.length) return;
-      const fixed=ITEMS_FIN.map(item=>{
-        const found=cats.find(c=>c.categoria===item);
-        return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",isCustom:false};
-      });
-      const custom=cats.filter(c=>c.is_custom).map(c=>({
-        id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true
-      }));
-      setFinanciero([...fixed,...custom]);
+      const fixedPre=ITEMS_PREOP.map(item=>{const found=cats.find(c=>c.categoria===item);return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",fase:"pre_operativa",isCustom:false};});
+      const fixedOp=ITEMS_OP.map(item=>{const found=cats.find(c=>c.categoria===item);return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",fase:"operativa",isCustom:false};});
+      const custom=cats.filter(c=>c.is_custom).map(c=>({id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true,fase:c.fase||"operativa"}));
+      setFinanciero([...fixedPre,...fixedOp,...custom]);
     });
   },[]);// eslint-disable-line
 
   const cargarCategoriasProyecto=async(proj)=>{
     const cats=await loadPresupuestoProyecto(proj);
     if(cats&&cats.length){
-      const fixed=ITEMS_FIN.map(item=>{
-        const found=cats.find(c=>c.categoria===item);
-        return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",isCustom:false};
-      });
-      const custom=cats.filter(c=>c.is_custom).map(c=>({
-        id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true
-      }));
-      setFinanciero([...fixed,...custom]);
+      const fixedPre=ITEMS_PREOP.map(item=>{const found=cats.find(c=>c.categoria===item);return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",fase:"pre_operativa",isCustom:false};});
+      const fixedOp=ITEMS_OP.map(item=>{const found=cats.find(c=>c.categoria===item);return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",fase:"operativa",isCustom:false};});
+      const custom=cats.filter(c=>c.is_custom).map(c=>({id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true,fase:c.fase||"operativa"}));
+      setFinanciero([...fixedPre,...fixedOp,...custom]);
     } else {
       setFinanciero(emptyFinanciero());
     }
   };
 
   const chgProj=async p=>{setProject(p);setFrentes(initFrentes(p));await cargarCategoriasProyecto(p);};
-  const addCategoria=()=>setFinanciero(fs=>[...fs,{id:Date.now()+Math.random(),item:"",presupuesto:"",ejecutado:"",isCustom:true}]);
+  const addCategoria=(fase)=>setFinanciero(fs=>[...fs,{id:Date.now()+Math.random(),item:"",presupuesto:"",ejecutado:"",isCustom:true,fase:fase||"operativa"}]);
   const rmCategoria=i=>setFinanciero(fs=>fs.filter((_,j)=>j!==i));
 
   const setFr=(fi,k,v)=>setFrentes(fs=>fs.map((f,j)=>j===fi?{...f,[k]:v}:f));
@@ -1038,59 +1035,82 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
 
       <Card style={{marginBottom:16}}>
         <SectionTitle color={C.blue}>Resumen Financiero Global del Proyecto</SectionTitle>
-        {financiero.map((f,ii)=>{
-          const pres=+f.presupuesto||0;
-          const periodo=+f.ejecutado||0;
-          const acum=(cumAnterior[f.item]||0)+periodo;
-          const pct=pres>0?acum/pres*100:0;
-          const balance=pres-acum;
-          const barColor=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
+        {[{key:"pre_operativa",label:"PRE OPERATIVA",icon:"📋"},{key:"operativa",label:"OPERATIVA",icon:"⚙️"}].map(({key:faseKey,label:faseLabel,icon:faseIcon})=>{
+          const items=financiero.map((f,ii)=>({...f,_ii:ii})).filter(f=>f.fase===faseKey);
+          const subPres=items.reduce((s,f)=>s+(+f.presupuesto||0),0);
+          const subAcum=items.reduce((s,f)=>s+(cumAnterior[f.item]||0)+(+f.ejecutado||0),0);
+          const subPct=subPres>0?subAcum/subPres*100:0;
+          const subBarC=subPct>100?C.danger:subPct>=90?C.green:subPct>=60?C.warn:C.danger;
           return (
-            <div key={f.isCustom?(f.id||ii):f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
-              <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
-                {f.isCustom
-                  ?<input style={{...INP,width:150,flexShrink:0,padding:"4px 8px",fontSize:12,marginTop:14}} placeholder="Nombre categoría..." value={f.item} onChange={e=>setFin(ii,"item",e.target.value)}/>
-                  :<div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
-                }
-                <div style={{flex:1,minWidth:100}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
-                  <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} onChange={v=>setFin(ii,"presupuesto",v)}/>
-                </div>
-                <div style={{flex:1,minWidth:100}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Este período (COP)</div>
-                  <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} onChange={v=>setFin(ii,"ejecutado",v)}/>
-                </div>
-                <div style={{flex:1,minWidth:100}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
-                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"0d",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(acum)}</div>
-                </div>
-                {pres>0&&acum>0&&(
-                  <div style={{minWidth:100,textAlign:"center",paddingTop:16}}>
-                    {balance>0
-                      ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 SALDO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
-                      :balance<0
-                        ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
-                        :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
-                    }
-                  </div>
-                )}
-                {f.isCustom&&<button style={{...BTN_SM,padding:"4px 8px",alignSelf:"center",marginTop:14,color:C.danger,borderColor:C.danger,flexShrink:0}} onClick={()=>rmCategoria(ii)}>✕</button>}
+            <div key={faseKey} style={{marginBottom:16}}>
+              <div style={{background:C.bgCard2,borderRadius:8,padding:"6px 12px",marginBottom:8,borderLeft:`3px solid ${C.blue}`}}>
+                <span style={{color:C.blue,fontWeight:800,fontSize:12,letterSpacing:0.5}}>{faseIcon} FASE {faseLabel}</span>
               </div>
-              {pres>0&&acum>0&&(
-                <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
-                    <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barColor,borderRadius:4,transition:"width 0.3s"}}/>
+              {items.map(f=>{
+                const ii=f._ii;
+                const pres=+f.presupuesto||0;
+                const periodo=+f.ejecutado||0;
+                const acum=(cumAnterior[f.item]||0)+periodo;
+                const pct=pres>0?acum/pres*100:0;
+                const balance=pres-acum;
+                const barColor=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
+                return (
+                  <div key={f.isCustom?(f.id||ii):f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
+                    <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+                      {f.isCustom
+                        ?<input style={{...INP,width:150,flexShrink:0,padding:"4px 8px",fontSize:12,marginTop:14}} placeholder="Nombre categoría..." value={f.item} onChange={e=>setFin(ii,"item",e.target.value)}/>
+                        :<div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
+                      }
+                      <div style={{flex:1,minWidth:100}}>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
+                        <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} onChange={v=>setFin(ii,"presupuesto",v)}/>
+                      </div>
+                      <div style={{flex:1,minWidth:100}}>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Este período (COP)</div>
+                        <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} onChange={v=>setFin(ii,"ejecutado",v)}/>
+                      </div>
+                      <div style={{flex:1,minWidth:100}}>
+                        <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
+                        <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"0d",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(acum)}</div>
+                      </div>
+                      {pres>0&&acum>0&&(
+                        <div style={{minWidth:100,textAlign:"center",paddingTop:16}}>
+                          {balance>0
+                            ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 SALDO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
+                            :balance<0
+                              ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
+                              :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
+                          }
+                        </div>
+                      )}
+                      {f.isCustom&&<button style={{...BTN_SM,padding:"4px 8px",alignSelf:"center",marginTop:14,color:C.danger,borderColor:C.danger,flexShrink:0}} onClick={()=>rmCategoria(ii)}>✕</button>}
+                    </div>
+                    {pres>0&&acum>0&&(
+                      <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
+                          <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barColor,borderRadius:4,transition:"width 0.3s"}}/>
+                        </div>
+                        <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:68,whiteSpace:"nowrap"}}>Acum: {pct.toFixed(1)}%</span>
+                        {periodo>0&&pres>0&&(
+                          <span style={{color:C.muted,fontSize:11,minWidth:80,whiteSpace:"nowrap"}}>Período: {(pres>0?periodo/pres*100:0).toFixed(1)}%</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:68,whiteSpace:"nowrap"}}>Acum: {pct.toFixed(1)}%</span>
-                  {periodo>0&&pres>0&&(
-                    <span style={{color:C.muted,fontSize:11,minWidth:80,whiteSpace:"nowrap"}}>Período: {(pres>0?periodo/pres*100:0).toFixed(1)}%</span>
-                  )}
+                );
+              })}
+              <button style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid,marginTop:8,marginBottom:4}} onClick={()=>addCategoria(faseKey)}>+ Categoría {faseKey==="pre_operativa"?"Pre Operativa":"Operativa"}</button>
+              {subPres>0&&(
+                <div style={{background:C.bgCard2,borderRadius:8,padding:"7px 12px",marginTop:6,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",border:`1px solid ${C.border}`}}>
+                  <span style={{color:C.blue,fontWeight:800,fontSize:11,flex:1}}>Subtotal {faseLabel}</span>
+                  <span style={{color:C.muted,fontSize:11}}>Pres: <b style={{color:C.blue}}>{fmt(subPres)}</b></span>
+                  <span style={{color:C.muted,fontSize:11}}>Acum: <b style={{color:C.blue}}>{fmt(subAcum)}</b></span>
+                  <span style={{color:subBarC,fontWeight:800,fontSize:12}}>{subPct.toFixed(1)}%</span>
                 </div>
               )}
             </div>
           );
         })}
-        <button style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid,marginTop:10}} onClick={addCategoria}>+ Agregar categoría</button>
         {(()=>{
           const totalPres=financiero.reduce((s,f)=>s+(+f.presupuesto||0),0);
           const totalPeriodo=financiero.reduce((s,f)=>s+(+f.ejecutado||0),0);
@@ -1576,6 +1596,23 @@ function Dashboard({reports}){
     return acc;
   },[reports]);
 
+  const mensualByProject=useMemo(()=>{
+    const acc={};
+    reports.filter(r=>r.role==="Ingeniero"&&r.date).forEach(r=>{
+      const mes=r.date.substring(0,7);
+      if(!acc[r.project]) acc[r.project]={};
+      if(!acc[r.project][mes]) acc[r.project][mes]={};
+      (r.financiero||[]).forEach(f=>{
+        if(!f.item) return;
+        if(!acc[r.project][mes][f.item]) acc[r.project][mes][f.item]=0;
+        acc[r.project][mes][f.item]+=(+f.ejecutado||0);
+      });
+    });
+    return acc;
+  },[reports]);
+
+  const [mesTabProj,setMesTabProj]=useState(PROJECTS[0]);
+
   return (
     <div>
       <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Dashboard Directivo</h2>
@@ -1644,6 +1681,7 @@ function Dashboard({reports}){
             const totalPct=totalPres>0?totalAcum/totalPres*100:0;
             const barColor=totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
             if(!totalPres&&!totalAcum) return null;
+            const fases=[{key:"pre_operativa",label:"PRE OPERATIVA",icon:"📋"},{key:"operativa",label:"OPERATIVA",icon:"⚙️"}];
             return (
               <div key={proj} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 1px 4px #0001"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -1659,24 +1697,32 @@ function Dashboard({reports}){
                     <span>Presupuesto total: {fmt(totalPres)}</span>
                   </div>
                 </div>
-                {cats.map(c=>{
-                  const ejec=acum[c.categoria]||0;
-                  const pct=c.presupuesto>0?ejec/c.presupuesto*100:0;
-                  const barC=pct>=90?C.green:pct>=60?C.warn:C.danger;
+                {fases.map(({key:fk,label:fl,icon:fi})=>{
+                  const faseCats=cats.filter(c=>(c.fase||"operativa")===fk);
+                  if(!faseCats.length) return null;
+                  const faseHasPres=faseCats.some(c=>c.presupuesto>0);
                   return (
-                    <div key={c.categoria} style={{padding:"5px 0",borderBottom:`1px solid ${C.border}44`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
-                        <span style={{color:C.text,fontWeight:600}}>{c.categoria}</span>
-                        <span style={{color:barC,fontWeight:700}}>{pct.toFixed(1)}%</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{flex:1,background:C.border,borderRadius:3,height:5,overflow:"hidden"}}>
-                          <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barC,borderRadius:3}}/>
-                        </div>
-                        <span style={{color:C.muted,fontSize:10,whiteSpace:"nowrap",minWidth:130,textAlign:"right"}}>
-                          {fmt(ejec)} / {fmt(c.presupuesto)}
-                        </span>
-                      </div>
+                    <div key={fk} style={{marginBottom:8}}>
+                      <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:0.5,padding:"4px 0 2px",borderBottom:`1px solid ${C.border}`}}>{fi} {fl}</div>
+                      {faseCats.filter(c=>c.presupuesto>0||acum[c.categoria]>0).map(c=>{
+                        const ejec=acum[c.categoria]||0;
+                        const pct=c.presupuesto>0?ejec/c.presupuesto*100:0;
+                        const barC=pct>=90?C.green:pct>=60?C.warn:C.danger;
+                        return (
+                          <div key={c.categoria} style={{padding:"5px 0",borderBottom:`1px solid ${C.border}44`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                              <span style={{color:C.text,fontWeight:600}}>{c.categoria}</span>
+                              <span style={{color:barC,fontWeight:700}}>{pct.toFixed(1)}%</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <div style={{flex:1,background:C.border,borderRadius:3,height:5,overflow:"hidden"}}>
+                                <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barC,borderRadius:3}}/>
+                              </div>
+                              <span style={{color:C.muted,fontSize:10,whiteSpace:"nowrap",minWidth:130,textAlign:"right"}}>{fmt(ejec)} / {fmt(c.presupuesto)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -1685,6 +1731,72 @@ function Dashboard({reports}){
           })}
         </div>
       )}
+
+      {(()=>{
+        const projMes=mensualByProject[mesTabProj]||{};
+        const meses=Object.keys(projMes).sort();
+        const allItems=[...new Set(meses.flatMap(m=>Object.keys(projMes[m]||{})))];
+        const preOp=allItems.filter(it=>ITEMS_PREOP.includes(it));
+        const op=allItems.filter(it=>!ITEMS_PREOP.includes(it));
+        const faseGroups=[{label:"PRE OPERATIVA",icon:"📋",items:preOp},{label:"OPERATIVA",icon:"⚙️",items:op}].filter(g=>g.items.length>0);
+        if(!meses.length) return null;
+        const cellStyle={padding:"6px 10px",fontSize:11,borderBottom:`1px solid ${C.border}44`,textAlign:"right",whiteSpace:"nowrap"};
+        const hStyle={padding:"6px 10px",fontSize:10,color:C.muted,fontWeight:700,textAlign:"right",whiteSpace:"nowrap",background:C.bgCard2};
+        const fmtMes=m=>{const [y,mo]=m.split("-");const n=["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][+mo];return `${n}-${y.slice(2)}`;};
+        return (
+          <div style={{marginTop:32}}>
+            <h3 style={{color:C.blue,fontWeight:800,marginBottom:12,fontSize:16}}>📅 Seguimiento Mensual de Ejecución</h3>
+            <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+              {PROJECTS.map(p=>(
+                <button key={p} onClick={()=>setMesTabProj(p)} style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${mesTabProj===p?C.blue:C.border}`,background:mesTabProj===p?C.blue:"transparent",color:mesTabProj===p?"#fff":C.muted,fontWeight:mesTabProj===p?700:400,fontSize:12,cursor:"pointer"}}>{p}</button>
+              ))}
+            </div>
+            <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.border}`}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:C.bgCard2}}>
+                    <th style={{...hStyle,textAlign:"left",minWidth:170}}>Ítem</th>
+                    {meses.map(m=><th key={m} style={hStyle}>{fmtMes(m)}</th>)}
+                    <th style={{...hStyle,color:C.blue}}>TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faseGroups.map(({label,icon,items})=>(
+                    <React.Fragment key={label}>
+                      <tr style={{background:C.bgCard2}}>
+                        <td colSpan={meses.length+2} style={{padding:"5px 10px",fontSize:10,color:C.blue,fontWeight:800,letterSpacing:0.5}}>{icon} {label}</td>
+                      </tr>
+                      {items.map(it=>{
+                        const total=meses.reduce((s,m)=>s+(projMes[m]?.[it]||0),0);
+                        if(!total) return null;
+                        return (
+                          <tr key={it} style={{background:C.bgCard}}>
+                            <td style={{...cellStyle,textAlign:"left",color:C.text,fontWeight:600,paddingLeft:18}}>{it}</td>
+                            {meses.map(m=><td key={m} style={{...cellStyle,color:projMes[m]?.[it]?C.text:C.muted}}>{projMes[m]?.[it]?fmt(projMes[m][it]):"—"}</td>)}
+                            <td style={{...cellStyle,color:C.blue,fontWeight:700}}>{fmt(total)}</td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                  {meses.length>0&&(()=>{
+                    const totPorMes=meses.map(m=>Object.values(projMes[m]||{}).reduce((s,v)=>s+v,0));
+                    const gran=totPorMes.reduce((s,v)=>s+v,0);
+                    if(!gran) return null;
+                    return (
+                      <tr style={{background:C.bgCard2,fontWeight:700}}>
+                        <td style={{...cellStyle,textAlign:"left",color:C.blue,fontWeight:800}}>TOTAL GENERAL</td>
+                        {totPorMes.map((v,i)=><td key={i} style={{...cellStyle,color:C.blue,fontWeight:700}}>{v?fmt(v):"—"}</td>)}
+                        <td style={{...cellStyle,color:C.blue,fontWeight:800}}>{fmt(gran)}</td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
