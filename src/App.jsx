@@ -460,6 +460,28 @@ async function updateUsuario(id, changes){
   if(error){ console.error('Error actualizando usuario:', error); return false; }
   return true;
 }
+async function loadPresupuestoProyecto(project){
+  const { data, error } = await supabase.from('presupuesto_proyecto').select('*').eq('project', project).order('id', {ascending:true});
+  if(error){ console.error('Error cargando presupuesto:', error); return null; }
+  return data || [];
+}
+async function savePresupuestoProyecto(project, items){
+  const rows = items.filter(it=>it.item&&it.item.trim()).map(it=>({
+    project,
+    categoria: it.item,
+    presupuesto: +it.presupuesto || 0,
+    is_custom: !!it.isCustom
+  }));
+  if(!rows.length) return true;
+  const { error } = await supabase.from('presupuesto_proyecto').upsert(rows, {onConflict:'project,categoria'});
+  if(error){ console.error('Error guardando presupuesto:', error); return false; }
+  return true;
+}
+async function loadAllPresupuestoProyecto(){
+  const { data, error } = await supabase.from('presupuesto_proyecto').select('*').order('project').order('id', {ascending:true});
+  if(error){ console.error('Error cargando presupuestos:', error); return []; }
+  return data || [];
+}
 
 // ── EMPTY HELPERS ─────────────────────────────────────────────────────────────
 const emptyAct = () => ({id:Date.now()+Math.random(),actividad:"",actividadOtro:"",equipo:"",equipoOtro:"",personal:"",personalOtro:"",cantidad:"",unidad:"m³",unidadOtro:"",etapa:"Etapa 1",observaciones:""});
@@ -768,7 +790,7 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
 }
 
 // ── INGENIERO FORM ────────────────────────────────────────────────────────────
-function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
+function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
   const initial = editingReport;
   const initFrentes = (proj) => (FRENTES_POR_PROYECTO[proj]||FRENTES_MASTER).map(nombre=>emptyFrente(nombre));
 
@@ -785,7 +807,54 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const [sending,setSending]=useState(false);
   const [sent,setSent]=useState(false);
 
-  const chgProj=p=>{setProject(p);setFrentes(initFrentes(p));};
+  // Acumulado histórico de todos los informes anteriores del mismo proyecto (excluye el actual)
+  const cumAnterior=useMemo(()=>{
+    const acc={};
+    (reports||[]).filter(r=>r.role==="Ingeniero"&&r.project===project&&r.id!==(initial?.id)).forEach(r=>{
+      (r.financiero||[]).forEach(f=>{
+        if(!acc[f.item]) acc[f.item]=0;
+        acc[f.item]+=(+f.ejecutado||0);
+      });
+    });
+    return acc;
+  },[reports,project,initial?.id]);
+
+  // Cargar categorías del proyecto desde Supabase al montar (solo informes nuevos)
+  useEffect(()=>{
+    if(initial) return;
+    loadPresupuestoProyecto(project).then(cats=>{
+      if(!cats||!cats.length) return;
+      const fixed=ITEMS_FIN.map(item=>{
+        const found=cats.find(c=>c.categoria===item);
+        return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",isCustom:false};
+      });
+      const custom=cats.filter(c=>c.is_custom).map(c=>({
+        id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true
+      }));
+      setFinanciero([...fixed,...custom]);
+    });
+  },[]);// eslint-disable-line
+
+  const cargarCategoriasProyecto=async(proj)=>{
+    const cats=await loadPresupuestoProyecto(proj);
+    if(cats&&cats.length){
+      const fixed=ITEMS_FIN.map(item=>{
+        const found=cats.find(c=>c.categoria===item);
+        return {item,presupuesto:found?String(found.presupuesto):"",ejecutado:"",isCustom:false};
+      });
+      const custom=cats.filter(c=>c.is_custom).map(c=>({
+        id:Date.now()+Math.random(),item:c.categoria,presupuesto:String(c.presupuesto),ejecutado:"",isCustom:true
+      }));
+      setFinanciero([...fixed,...custom]);
+    } else {
+      setFinanciero(emptyFinanciero());
+    }
+  };
+
+  const chgProj=async p=>{setProject(p);setFrentes(initFrentes(p));await cargarCategoriasProyecto(p);};
+  const addCategoria=()=>setFinanciero(fs=>[...fs,{id:Date.now()+Math.random(),item:"",presupuesto:"",ejecutado:"",isCustom:true}]);
+  const rmCategoria=i=>setFinanciero(fs=>fs.filter((_,j)=>j!==i));
+
   const setFr=(fi,k,v)=>setFrentes(fs=>fs.map((f,j)=>j===fi?{...f,[k]:v}:f));
   const addFr=()=>setFrentes(fs=>[...fs,emptyFrente()]);
   const rmFr=fi=>setFrentes(fs=>fs.filter((_,j)=>j!==fi));
@@ -814,7 +883,10 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
       history=[...history,{accion:"Editado",por:usuario.nombre,uid:usuario.id,fecha:now}];
     }
     const report={...baseReport, createdAt: initial?.createdAt||now, history};
-    await onSubmit(report, !!editingReport);
+    await Promise.all([
+      onSubmit(report, !!editingReport),
+      savePresupuestoProyecto(project, financiero)
+    ]);
     setSending(false);
     setSent(true);
     setTimeout(()=>setSent(false),3000);
@@ -947,80 +1019,92 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario}){
         <SectionTitle color={C.blue}>Resumen Financiero Global del Proyecto</SectionTitle>
         {financiero.map((f,ii)=>{
           const pres=+f.presupuesto||0;
-          const ejec=+f.ejecutado||0;
-          const pct=pres>0?ejec/pres*100:0;
-          const balance=pres-ejec;
+          const periodo=+f.ejecutado||0;
+          const acum=(cumAnterior[f.item]||0)+periodo;
+          const pct=pres>0?acum/pres*100:0;
+          const balance=pres-acum;
           const barColor=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
           return (
-            <div key={f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
+            <div key={f.isCustom?(f.id||ii):f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
               <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
-                <div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
-                <div style={{flex:1,minWidth:110}}>
+                {f.isCustom
+                  ?<input style={{...INP,width:150,flexShrink:0,padding:"4px 8px",fontSize:12,marginTop:14}} placeholder="Nombre categoría..." value={f.item} onChange={e=>setFin(ii,"item",e.target.value)}/>
+                  :<div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
+                }
+                <div style={{flex:1,minWidth:100}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
                   <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} placeholder="$" onChange={e=>setFin(ii,"presupuesto",e.target.value)}/>
                 </div>
-                <div style={{flex:1,minWidth:110}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Ejecutado (COP)</div>
+                <div style={{flex:1,minWidth:100}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Este período (COP)</div>
                   <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} placeholder="$" onChange={e=>setFin(ii,"ejecutado",e.target.value)}/>
                 </div>
-                {pres>0&&ejec>0&&(
-                  <div style={{minWidth:110,textAlign:"center",paddingTop:16}}>
+                <div style={{flex:1,minWidth:100}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
+                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"0d",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(acum)}</div>
+                </div>
+                {pres>0&&acum>0&&(
+                  <div style={{minWidth:100,textAlign:"center",paddingTop:16}}>
                     {balance>0
-                      ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 AHORRO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
+                      ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 SALDO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
                       :balance<0
                         ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
                         :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
                     }
                   </div>
                 )}
+                {f.isCustom&&<button style={{...BTN_SM,padding:"4px 8px",alignSelf:"center",marginTop:14,color:C.danger,borderColor:C.danger,flexShrink:0}} onClick={()=>rmCategoria(ii)}>✕</button>}
               </div>
-              {pres>0&&(
+              {pres>0&&acum>0&&(
                 <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
                   <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
                     <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barColor,borderRadius:4,transition:"width 0.3s"}}/>
                   </div>
-                  <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {pct.toFixed(1)}%</span>
-                  {pct<=100&&ejec>0&&(
-                    <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-pct).toFixed(1)}%</span>
+                  <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:68,whiteSpace:"nowrap"}}>Acum: {pct.toFixed(1)}%</span>
+                  {periodo>0&&pres>0&&(
+                    <span style={{color:C.muted,fontSize:11,minWidth:80,whiteSpace:"nowrap"}}>Período: {(pres>0?periodo/pres*100:0).toFixed(1)}%</span>
                   )}
                 </div>
               )}
             </div>
           );
         })}
+        <button style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid,marginTop:10}} onClick={addCategoria}>+ Agregar categoría</button>
         {(()=>{
           const totalPres=financiero.reduce((s,f)=>s+(+f.presupuesto||0),0);
-          const totalEjec=financiero.reduce((s,f)=>s+(+f.ejecutado||0),0);
-          const totalPct=totalPres>0?totalEjec/totalPres*100:0;
+          const totalPeriodo=financiero.reduce((s,f)=>s+(+f.ejecutado||0),0);
+          const totalAcum=financiero.reduce((s,f)=>s+(cumAnterior[f.item]||0)+(+f.ejecutado||0),0);
+          const totalPct=totalPres>0?totalAcum/totalPres*100:0;
           const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
-          if(!totalPres&&!totalEjec) return null;
+          if(!totalPres&&!totalAcum) return null;
           return (
-            <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:4}}>
+            <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:8}}>
               <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
                 <div style={{width:155,color:C.blue,fontWeight:800,fontSize:12,paddingTop:18,flexShrink:0}}>TOTAL GENERAL</div>
-                <div style={{flex:1,minWidth:110}}>
+                <div style={{flex:1,minWidth:100}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto total</div>
                   <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalPres)}</div>
                 </div>
-                <div style={{flex:1,minWidth:110}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Ejecutado total</div>
-                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalEjec)}</div>
+                <div style={{flex:1,minWidth:100}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Este período</div>
+                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalPeriodo)}</div>
                 </div>
-                <div style={{minWidth:110}}/>
+                <div style={{flex:1,minWidth:100}}>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
+                  <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalAcum)}</div>
+                </div>
+                <div style={{minWidth:100}}/>
               </div>
               <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
                 <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
                   <div style={{width:`${Math.min(totalPct,100)}%`,height:"100%",background:barColor,borderRadius:4}}/>
                 </div>
-                <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:55,whiteSpace:"nowrap"}}>Ejec: {totalPct.toFixed(1)}%</span>
-                {totalPct<=100&&totalEjec>0&&(
-                  <span style={{color:C.muted,fontSize:11,minWidth:75,whiteSpace:"nowrap"}}>Por ejec: {(100-totalPct).toFixed(1)}%</span>
-                )}
+                <span style={{color:barColor,fontWeight:700,fontSize:11,minWidth:68,whiteSpace:"nowrap"}}>Acum: {totalPct.toFixed(1)}%</span>
               </div>
             </div>
           );
         })()}
-        <div style={{textAlign:"right",marginTop:10,color:C.blue,fontWeight:700}}>Total período: {fmt(totalGastos)}</div>
+        <div style={{textAlign:"right",marginTop:10,color:C.blue,fontWeight:700}}>Total gastos período: {fmt(totalGastos)}</div>
       </Card>
 
       <Card style={{marginBottom:16}}>
@@ -1441,6 +1525,33 @@ function ReportList({reports,onSelect,onEdit,onDelete}){
 function Dashboard({reports}){
   const byProj={};
   PROJECTS.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
+
+  const [presupuestos,setPresupuestos]=useState([]);
+  useEffect(()=>{
+    loadAllPresupuestoProyecto().then(data=>setPresupuestos(data));
+  },[]);
+
+  const presByProject=useMemo(()=>{
+    const acc={};
+    presupuestos.forEach(row=>{
+      if(!acc[row.project]) acc[row.project]=[];
+      acc[row.project].push(row);
+    });
+    return acc;
+  },[presupuestos]);
+
+  const cumByProject=useMemo(()=>{
+    const acc={};
+    reports.filter(r=>r.role==="Ingeniero").forEach(r=>{
+      if(!acc[r.project]) acc[r.project]={};
+      (r.financiero||[]).forEach(f=>{
+        if(!acc[r.project][f.item]) acc[r.project][f.item]=0;
+        acc[r.project][f.item]+=(+f.ejecutado||0);
+      });
+    });
+    return acc;
+  },[reports]);
+
   return (
     <div>
       <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Dashboard Directivo</h2>
@@ -1498,6 +1609,58 @@ function Dashboard({reports}){
           );
         })}
       </div>
+
+      {Object.keys(presByProject).length>0&&(
+        <div style={{marginTop:32}}>
+          <h3 style={{color:C.blue,fontWeight:800,marginBottom:16,fontSize:16}}>💰 Ejecución Financiera Acumulada por Proyecto</h3>
+          {Object.entries(presByProject).map(([proj,cats])=>{
+            const acum=cumByProject[proj]||{};
+            const totalPres=cats.reduce((s,c)=>s+c.presupuesto,0);
+            const totalAcum=cats.reduce((s,c)=>s+(acum[c.categoria]||0),0);
+            const totalPct=totalPres>0?totalAcum/totalPres*100:0;
+            const barColor=totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
+            if(!totalPres&&!totalAcum) return null;
+            return (
+              <div key={proj} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 1px 4px #0001"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <span style={{color:C.blue,fontWeight:700,fontSize:14}}>{proj}</span>
+                  <span style={{color:barColor,fontWeight:800,fontSize:14}}>{totalPct.toFixed(1)}% ejecutado</span>
+                </div>
+                <div style={{marginBottom:12}}>
+                  <div style={{flex:1,background:C.border,borderRadius:4,height:9,overflow:"hidden",marginBottom:4}}>
+                    <div style={{width:`${Math.min(totalPct,100)}%`,height:"100%",background:barColor,borderRadius:4,transition:"width 0.3s"}}/>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.muted}}>
+                    <span>Acumulado: {fmt(totalAcum)}</span>
+                    <span>Presupuesto total: {fmt(totalPres)}</span>
+                  </div>
+                </div>
+                {cats.map(c=>{
+                  const ejec=acum[c.categoria]||0;
+                  const pct=c.presupuesto>0?ejec/c.presupuesto*100:0;
+                  const barC=pct>=90?C.green:pct>=60?C.warn:C.danger;
+                  return (
+                    <div key={c.categoria} style={{padding:"5px 0",borderBottom:`1px solid ${C.border}44`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
+                        <span style={{color:C.text,fontWeight:600}}>{c.categoria}</span>
+                        <span style={{color:barC,fontWeight:700}}>{pct.toFixed(1)}%</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{flex:1,background:C.border,borderRadius:3,height:5,overflow:"hidden"}}>
+                          <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:barC,borderRadius:3}}/>
+                        </div>
+                        <span style={{color:C.muted,fontSize:10,whiteSpace:"nowrap",minWidth:130,textAlign:"right"}}>
+                          {fmt(ejec)} / {fmt(c.presupuesto)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1908,7 +2071,7 @@ export default function App(){
       )}
         {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
-        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
           <div>
             {!editingReport&&(
@@ -1924,7 +2087,7 @@ export default function App(){
               </div>
             )}
             {directivoForm==="coord"&&<CoordForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
-            {directivoForm==="ing"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario}/>}
+            {directivoForm==="ing"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
           </div>
         )}
         {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
