@@ -789,6 +789,27 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   );
 }
 
+function CurrencyInput({value, onChange, style, placeholder}){
+  const [editing,setEditing]=useState(false);
+  const display=editing||(value===""||value===undefined||value===null)
+    ? (value===0||value==="0"?"":String(value||""))
+    : (value!==""&&+value>0 ? fmt(+value) : "");
+  return (
+    <input
+      type="text"
+      style={style}
+      placeholder={placeholder||"$"}
+      value={display}
+      onFocus={()=>setEditing(true)}
+      onBlur={()=>setEditing(false)}
+      onChange={e=>{
+        const raw=e.target.value.replace(/[^0-9]/g,"");
+        onChange(raw);
+      }}
+    />
+  );
+}
+
 // ── INGENIERO FORM ────────────────────────────────────────────────────────────
 function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
   const initial = editingReport;
@@ -1033,11 +1054,11 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
                 }
                 <div style={{flex:1,minWidth:100}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
-                  <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} placeholder="$" onChange={e=>setFin(ii,"presupuesto",e.target.value)}/>
+                  <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.presupuesto} onChange={v=>setFin(ii,"presupuesto",v)}/>
                 </div>
                 <div style={{flex:1,minWidth:100}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Este período (COP)</div>
-                  <input type="number" style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} placeholder="$" onChange={e=>setFin(ii,"ejecutado",e.target.value)}/>
+                  <CurrencyInput style={{...INP,padding:"4px 8px",fontSize:12}} value={f.ejecutado} onChange={v=>setFin(ii,"ejecutado",v)}/>
                 </div>
                 <div style={{flex:1,minWidth:100}}>
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
