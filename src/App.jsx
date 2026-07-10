@@ -1336,15 +1336,17 @@ function verImprimirInforme(report){
   setTimeout(()=>w.print(), 800);
 }
 
-function ReportDetail({report,onBack,usuario}){
+function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
   const efic=(report.avanceObra||0)-(report.avanceRecursos||0);
   const st=semaforo(report.avanceObra,report.avanceRecursos,null,null,null,null);
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
   return (
     <div>
-      <div style={{display:"flex",gap:10,marginBottom:20}}>
-        <button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer"}}>← Volver</button>
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        {onBack&&<button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer"}}>← Volver</button>}
         <button onClick={()=>verImprimirInforme(report)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🖨️ Ver / Exportar PDF</button>
+        {onEdit&&<button onClick={()=>onEdit(report)} style={{background:"none",border:`1px solid ${C.blueMid}`,color:C.blueMid,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>✏️ Editar</button>}
+        {onDelete&&<button onClick={()=>onDelete(report)} style={{background:"none",border:`1px solid ${C.danger}`,color:C.danger,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🗑️ Eliminar</button>}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div>
@@ -1580,33 +1582,106 @@ function ReportDetail({report,onBack,usuario}){
 }
 
 // ── LIST ──────────────────────────────────────────────────────────────────────
-function ReportList({reports,onSelect,onEdit,onDelete}){
-  const TC={semanal:C.green,mensual:C.blueMid,trimestral:C.yellow};
+const TC={semanal:C.green,mensual:C.blueMid,trimestral:C.yellow};
+const TIPO_LABEL={semanal:"Semanal",mensual:"Mensual",trimestral:"Trimestral"};
+
+function ReportsTable({reports,onSelect,onEdit,onDelete}){
+  const [search,setSearch]=useState("");
+  const [fProyecto,setFProyecto]=useState("");
+  const [fEstado,setFEstado]=useState("");
+  const [fTipo,setFTipo]=useState("");
+
+  const proyectos=useMemo(()=>[...new Set(reports.map(r=>r.project))].sort(),[reports]);
+  const tipos=useMemo(()=>[...new Set(reports.map(r=>r.type).filter(Boolean))],[reports]);
+  const ediciones=r=>(r.history||[]).filter(h=>h.accion==="Editado").length;
+
+  const filtrados=useMemo(()=>{
+    const q=search.trim().toLowerCase();
+    return [...reports].reverse().filter(r=>{
+      if(q && !((r.project||"").toLowerCase().includes(q) || (r.author||"").toLowerCase().includes(q))) return false;
+      if(fProyecto && r.project!==fProyecto) return false;
+      if(fTipo && r.type!==fTipo) return false;
+      if(fEstado==="borrador" && r.estado!=="borrador") return false;
+      if(fEstado==="enviado" && r.estado==="borrador") return false;
+      if(fEstado==="editado" && ediciones(r)===0) return false;
+      return true;
+    });
+  },[reports,search,fProyecto,fEstado,fTipo]);
+
   return (
     <div>
+      <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr 1fr",gap:10,background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:14,marginBottom:14}}>
+        <input style={INP} placeholder="Buscar por proyecto, autor..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select style={INP} value={fProyecto} onChange={e=>setFProyecto(e.target.value)}>
+          <option value="">Proyecto: todos</option>
+          {proyectos.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+        <select style={INP} value={fEstado} onChange={e=>setFEstado(e.target.value)}>
+          <option value="">Estado: todos</option>
+          <option value="borrador">En progreso</option>
+          <option value="enviado">Enviado</option>
+          <option value="editado">Editado</option>
+        </select>
+        <select style={INP} value={fTipo} onChange={e=>setFTipo(e.target.value)}>
+          <option value="">Tipo: todos</option>
+          {tipos.map(t=><option key={t} value={t}>{TIPO_LABEL[t]||t}</option>)}
+        </select>
+      </div>
+
       {!reports.length&&<Card><div style={{color:C.muted,textAlign:"center",padding:16}}>No hay informes registrados aún.</div></Card>}
-      {[...reports].reverse().map(r=>(
-        <div key={r.id} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderLeft:`4px solid ${TC[r.type]||C.muted}`,borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px #0001"}}>
-          <div onClick={()=>onSelect(r)} style={{cursor:"pointer"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
-              <span style={{color:C.blue,fontWeight:700}}>{r.project}</span>
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                {r.estado==="borrador"&&<span style={{background:C.warn+"22",color:C.warn,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${C.warn}44`}}>En progreso</span>}
-                <span style={{background:(TC[r.type]||C.muted)+"18",color:TC[r.type]||C.muted,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:700,textTransform:"capitalize",border:`1px solid ${(TC[r.type]||C.muted)}44`}}>{r.type}</span>
-              </div>
-            </div>
-            <div style={{color:C.muted,fontSize:13,marginTop:4}}>{r.author}{r.mes?` — ${r.mes}`:""} · {r.date}</div>
-            <div style={{color:C.muted,fontSize:12,marginTop:4}}>{r.activities?.slice(0,80)}</div>
-            {r.totalGastos>0&&<div style={{color:C.green,fontSize:12,marginTop:4,fontWeight:600}}>💰 {fmt(r.totalGastos)}</div>}
-            {r.history&&r.history.length>1&&<div style={{color:C.warn,fontSize:11,marginTop:4}}>✏️ Editado {r.history.length-1} {r.history.length-1===1?"vez":"veces"}</div>}
+
+      {reports.length>0&&(
+        <>
+          <div style={{color:C.muted,fontSize:12,marginBottom:8}}>{filtrados.length} de {reports.length} informe{reports.length===1?"":"s"}</div>
+          <div style={{overflowX:"auto",border:`1px solid ${C.border}`,borderRadius:12,background:C.bgCard}}>
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:13,minWidth:720}}>
+              <thead>
+                <tr style={{background:C.bgCard2,borderBottom:`2px solid ${C.border}`}}>
+                  {["Proyecto","Elaborado por","Fecha","Tipo","Estado","Acciones"].map(h=>
+                    <th key={h} style={{textAlign:"left",color:C.muted,fontWeight:700,fontSize:11,letterSpacing:.3,textTransform:"uppercase",padding:"10px 12px",whiteSpace:"nowrap"}}>{h}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {!filtrados.length&&(
+                  <tr><td colSpan={6} style={{textAlign:"center",color:C.muted,padding:26}}>Ningún informe coincide con los filtros.</td></tr>
+                )}
+                {filtrados.map(r=>{
+                  const n=ediciones(r);
+                  const tColor=TC[r.type]||C.muted;
+                  const estColor=r.estado==="borrador"?C.warn:C.green;
+                  const estLabel=r.estado==="borrador"?"En progreso":"Enviado";
+                  return (
+                    <tr key={r.id} onClick={()=>onSelect(r)} style={{cursor:"pointer",borderBottom:`1px solid ${C.border}`}}>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{display:"flex",alignItems:"center",gap:6,fontWeight:700,color:C.blue}}>
+                          {r.project}
+                          {n>0&&<span title={`Editado ${n} ${n===1?"vez":"veces"}`} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:15,height:15,borderRadius:"50%",background:C.warn+"29",color:C.warn,fontSize:10,cursor:"help"}}>✏</span>}
+                        </span>
+                      </td>
+                      <td style={{padding:"9px 12px",color:C.muted}}>{r.author}</td>
+                      <td style={{padding:"9px 12px",color:C.muted,whiteSpace:"nowrap"}}>{r.date}</td>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{background:tColor+"18",color:tColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${tColor}44`,whiteSpace:"nowrap"}}>{TIPO_LABEL[r.type]||r.type}</span>
+                      </td>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{background:estColor+"22",color:estColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${estColor}44`,whiteSpace:"nowrap"}}>{estLabel}</span>
+                      </td>
+                      <td style={{padding:"9px 12px"}}>
+                        <div style={{display:"flex",gap:6,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                          <button onClick={()=>verImprimirInforme(r)} title="Ver / PDF" style={{...BTN_SM,color:C.blue,borderColor:C.blue}}>🖨️</button>
+                          <button onClick={()=>onEdit(r)} title="Editar" style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️</button>
+                          <button onClick={()=>onDelete(r)} title="Eliminar" style={{...BTN_SM,color:C.danger,borderColor:C.danger}}>🗑️</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div style={{display:"flex",gap:8,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-            <button onClick={()=>verImprimirInforme(r)} style={{...BTN_SM,color:C.blue,borderColor:C.blue,flex:1}}>🖨️ Ver / PDF</button>
-            <button onClick={()=>onEdit(r)} style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid,flex:1}}>✏️ Editar</button>
-            <button onClick={()=>onDelete(r)} style={{...BTN_SM,color:C.danger,borderColor:C.danger,flex:1}}>🗑️ Eliminar</button>
-          </div>
-        </div>
-      ))}
+        </>
+      )}
     </div>
   );
 }
@@ -2579,6 +2654,7 @@ export default function App(){
   const startEdit=(r)=>{
     setEditingReport(r);
     setTab("nuevo");
+    setSelected(null);
     if(usuario.rol==="Directivo") setDirectivoForm(r.role==="Ingeniero"?"ing":"coord");
   };
   const cancelEdit=()=>setEditingReport(null);
@@ -2587,6 +2663,7 @@ export default function App(){
     const updated = reports.filter(r=>r.id!==deletingReport.id);
     setReports(updated);
     await deleteReport(deletingReport.id);
+    if(selected?.id===deletingReport.id) setSelected(null);
     setDeletingReport(null);
   };
 
@@ -2662,7 +2739,7 @@ export default function App(){
           </div>
         )}
         {tab==="dashboard"&&<Dashboard reports={reports}/>}
-      {tab==="informes"&&!selected&&(
+      {tab==="informes"&&(
         <div>
           {loadError&&(
             <div style={{background:C.danger+"12",border:`1px solid ${C.danger}`,borderRadius:12,padding:14,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
@@ -2705,10 +2782,9 @@ export default function App(){
               </button>
             )}
           </div>
-          <ReportList reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport}/>
+          <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport}/>
         </div>
       )}
-        {tab==="informes"&&selected&&<ReportDetail report={selected} onBack={()=>setSelected(null)} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
@@ -2751,6 +2827,14 @@ export default function App(){
           </div>
         )}
       </div>
+      {selected&&(
+        <>
+          <div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"#0007",zIndex:1000}}/>
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"92vw",background:C.bgCard,boxShadow:"-12px 0 32px #0003",zIndex:1001,overflowY:"auto",padding:20}}>
+            <ReportDetail report={selected} onBack={()=>setSelected(null)} usuario={usuario} onEdit={startEdit} onDelete={setDeletingReport}/>
+          </div>
+        </>
+      )}
       {showDest&&(
         <DestinatariosManager key={destProject} project={destProject} destinatarios={destinatarios} onSave={saveDest} onClose={()=>setShowDest(false)}/>
       )}
