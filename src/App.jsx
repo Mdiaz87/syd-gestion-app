@@ -49,7 +49,7 @@ function SydLogo({size=44}){
 }
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
-const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Aqqua 4","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa","Parque Residencial Nona Happy"];
+const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Aqqua 4","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa","Vivante Norte"];
 const TEAM = {
   "Citrino":["Ósmar Álvarez","Ivan Pérez"],
   "Vivante Parque Residencial":["Felipe Zuluaga"],
@@ -59,7 +59,7 @@ const TEAM = {
   "Brisas del Lago 1":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas del Lago 2":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas de Baranoa":["Germán Mercado"],
-  "Parque Residencial Nona Happy":["Carmelo","Rafael Espinosa","Ivan Pérez"],
+  "Vivante Norte":["Carmelo","Rafael Espinosa","Ivan Pérez"],
 };
 const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
 const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
@@ -136,7 +136,7 @@ const FRENTES_POR_PROYECTO = {
     "Levantamiento Topográfico","Estudios Ambientales","Estudio Hidrológico y Diseño Hidráulico",
     "Diseño Arquitectónico","Diseño Eléctrico","Diseño de Vías"
   ],
-  "Parque Residencial Nona Happy": [
+  "Vivante Norte": [
     "Sistema Vial","Vías Externas","Limpieza y Descapote / Mantenimiento",
     "Redes de Agua","Red Eléctrica / Acometidas","Red de Gas Natural",
     "Estructuras Hidráulicas / Bordillos","Portería / Garita","Zonas Sociales",
