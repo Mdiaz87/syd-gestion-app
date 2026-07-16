@@ -150,11 +150,35 @@ export function DestinatariosManager({project, destinatarios, onSave, onClose}){
   );
 }
 
+// Las fotos solo se muestran como miniaturas (70-90px) en toda la app, nunca
+// a tamaño completo — se redimensionan y recomprimen acá para no cargar el
+// formulario ni el PDF con fotos de varios MB de la cámara del celular.
+const comprimirFoto=(file,maxLado=1280,calidad=0.75)=>new Promise(res=>{
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      let {width,height}=img;
+      if(width>maxLado||height>maxLado){
+        const s=maxLado/Math.max(width,height);
+        width=Math.round(width*s); height=Math.round(height*s);
+      }
+      const canvas=document.createElement("canvas");
+      canvas.width=width; canvas.height=height;
+      canvas.getContext("2d").drawImage(img,0,0,width,height);
+      res(canvas.toDataURL("image/jpeg",calidad));
+    };
+    img.onerror=()=>res(ev.target.result);
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
 export function PhotoUpload({photos,onAdd,onRemove}){
   const ref=useRef();
   const handle=e=>{
     const arr=Array.from(e.target.files).slice(0,6-photos.length);
-    Promise.all(arr.map(f=>new Promise(res=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.readAsDataURL(f);}))).then(urls=>onAdd(urls));
+    Promise.all(arr.map(f=>comprimirFoto(f))).then(urls=>onAdd(urls));
     e.target.value="";
   };
   return <div>
