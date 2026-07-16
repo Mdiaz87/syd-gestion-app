@@ -47,6 +47,20 @@ export function Dashboard({reports,presupuestos}){
     return acc;
   },[reports]);
 
+  const alertasSobrecosto=useMemo(()=>{
+    const alerts=[];
+    Object.entries(presByProject).forEach(([proj,cats])=>{
+      const acum=cumByProject[proj]||{};
+      cats.forEach(c=>{
+        const ejec=acum[c.categoria]||0;
+        if(c.presupuesto>0&&ejec>c.presupuesto){
+          alerts.push({proj,categoria:c.categoria,presupuesto:c.presupuesto,ejecutado:ejec,exceso:ejec-c.presupuesto,pct:ejec/c.presupuesto*100});
+        }
+      });
+    });
+    return alerts.sort((a,b)=>b.pct-a.pct);
+  },[presByProject,cumByProject]);
+
   const mensualByProject=useMemo(()=>{
     const acc={};
     reports.filter(r=>r.role==="Ingeniero"&&r.date).forEach(r=>{
@@ -79,6 +93,20 @@ export function Dashboard({reports,presupuestos}){
                   {r.coordPendiente&&<span style={{color:C.warn}}>⚠️ Sin informe semanal de Coordinador esta semana</span>}
                   {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: {r.diasIng===null?"nunca ha enviado un informe":`sin informe hace ${r.diasIng} días`}</span>}
                 </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {alertasSobrecosto.length>0&&(
+        <div style={{background:C.danger+"12",border:`1px solid ${C.danger}55`,borderRadius:12,padding:16,marginBottom:24}}>
+          <div style={{color:C.danger,fontWeight:800,fontSize:14,marginBottom:10}}>🚨 Alertas de Sobrecosto</div>
+          <div style={{display:"grid",gap:6}}>
+            {alertasSobrecosto.map((a,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.bgCard,borderRadius:8,padding:"8px 12px",fontSize:12,flexWrap:"wrap",gap:6}}>
+                <span style={{color:C.text,fontWeight:600}}>{a.proj} <span style={{color:C.muted,fontWeight:400}}>· {a.categoria}</span></span>
+                <span style={{color:C.danger,fontWeight:700}}>{a.pct.toFixed(0)}% ejecutado — excedido en {fmt(a.exceso)}</span>
               </div>
             ))}
           </div>
@@ -148,14 +176,14 @@ export function Dashboard({reports,presupuestos}){
             const totalPres=cats.reduce((s,c)=>s+c.presupuesto,0);
             const totalAcum=cats.reduce((s,c)=>s+(acum[c.categoria]||0),0);
             const totalPct=totalPres>0?totalAcum/totalPres*100:0;
-            const barColor=totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
+            const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
             if(!totalPres&&!totalAcum) return null;
             const fases=[{key:"pre_operativa",label:"PRE OPERATIVA",icon:"📋"},{key:"operativa",label:"OPERATIVA",icon:"⚙️"}];
             return (
               <div key={proj} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 1px 4px #0001"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <span style={{color:C.blue,fontWeight:700,fontSize:14}}>{proj}</span>
-                  <span style={{color:barColor,fontWeight:800,fontSize:14}}>{totalPct.toFixed(1)}% ejecutado</span>
+                  <span style={{color:barColor,fontWeight:800,fontSize:14}}>{totalPct.toFixed(1)}% ejecutado{totalPct>100?" ⚠️":""}</span>
                 </div>
                 <div style={{marginBottom:12}}>
                   <div style={{flex:1,background:C.border,borderRadius:4,height:9,overflow:"hidden",marginBottom:4}}>
@@ -176,12 +204,12 @@ export function Dashboard({reports,presupuestos}){
                       {faseCats.filter(c=>c.presupuesto>0||acum[c.categoria]>0).map(c=>{
                         const ejec=acum[c.categoria]||0;
                         const pct=c.presupuesto>0?ejec/c.presupuesto*100:0;
-                        const barC=pct>=90?C.green:pct>=60?C.warn:C.danger;
+                        const barC=pct>100?C.danger:pct>=90?C.green:pct>=60?C.warn:C.danger;
                         return (
                           <div key={c.categoria} style={{padding:"5px 0",borderBottom:`1px solid ${C.border}44`}}>
                             <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:2}}>
                               <span style={{color:C.text,fontWeight:600}}>{c.categoria}</span>
-                              <span style={{color:barC,fontWeight:700}}>{pct.toFixed(1)}%</span>
+                              <span style={{color:barC,fontWeight:700}}>{pct.toFixed(1)}%{pct>100?" ⚠️":""}</span>
                             </div>
                             <div style={{display:"flex",alignItems:"center",gap:8}}>
                               <div style={{flex:1,background:C.border,borderRadius:3,height:5,overflow:"hidden"}}>
