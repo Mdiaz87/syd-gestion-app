@@ -43,6 +43,7 @@ export const ESTADO_OPTS = ["Aprobado","Pendiente","Rechazado"];
 export const ITEMS_PREOP=["Limpieza y descapote","Levantamiento topográfico","Estudios ambientales","Estudio hidrológico y diseño hidráulico","Diseño arquitectónico","Diseño eléctrico","Diseño de vías"];
 export const ITEMS_OP=["Sistema Vial","Estructuras Hidráulicas","Red de Distribución de Agua","Red Eléctrica","Zonas Sociales","Movimiento de tierras","Drenaje de aguas lluvias","Portería"];
 export const DAY_NAMES = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+export const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 export const TRAMITES = ["Ocupación de Cauce","RCD","Prospección y Exploración de Aguas Subterráneas","Concesión de Aguas Subterráneas"];
 
 export const FRENTES_MASTER = [

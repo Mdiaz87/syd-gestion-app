@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS } from "../lib/constants.js";
+import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS, MESES } from "../lib/constants.js";
 import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite } from "../lib/helpers.js";
 import { loadPresupuestoProyecto, savePresupuestoProyecto } from "../lib/api.js";
 import { Card, SectionTitle, PhotoUpload, CurrencyInput, Bar } from "./ui.jsx";
@@ -13,7 +13,18 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const [project,setProject]=useState(initial?.project||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [type,setType]=useState(initial?.type||"mensual");
-  const [mes,setMes]=useState(initial?.mes||"");
+  const now=new Date();
+  const parsedMes=(()=>{
+    const partes=(initial?.mes||"").trim().split(/\s+/);
+    const nombre=MESES.find(m=>m.toLowerCase()===partes[0]?.toLowerCase());
+    if(!nombre) return null;
+    const anioTxt=parseInt(partes[1],10);
+    return { nombre, anio: Number.isFinite(anioTxt)?anioTxt:now.getFullYear() };
+  })();
+  const [mesNombre,setMesNombre]=useState(parsedMes?.nombre||MESES[now.getMonth()]);
+  const [anio,setAnio]=useState(parsedMes?.anio||now.getFullYear());
+  const anios=[...new Set([now.getFullYear()-1,now.getFullYear(),now.getFullYear()+1,anio])].sort();
+  const mes=`${mesNombre} ${anio}`;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [avRec,setAvRec]=useState(initial?.avanceRecursos||0);
   const [frentes,setFrentes]=useState(()=>initial?.frentes||initFrentes(initial?.project||PROJECTS[0]));
@@ -77,10 +88,6 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
 
   const doSubmit=async()=>{
-    if(!mes.trim()){
-      alert("⚠️ Completa el campo \"Mes / Período\" antes de enviar el informe.");
-      return;
-    }
     const tieneContenido=frentes.some(f=>f.descripcion?.trim())||financiero.some(f=>+f.presupuesto>0||+f.ejecutado>0);
     if(!tieneContenido){
       alert("⚠️ Agrega al menos una descripción en un frente de trabajo o datos financieros antes de enviar el informe.");
@@ -140,9 +147,19 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-          <div>
-            <label style={{color:C.muted,fontSize:12}}>Mes / Período</label>
-            <input style={INP} value={mes} onChange={e=>setMes(e.target.value)} placeholder="Ej: Mayo 2026"/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div>
+              <label style={{color:C.muted,fontSize:12}}>Mes</label>
+              <select style={INP} value={mesNombre} onChange={e=>setMesNombre(e.target.value)}>
+                {MESES.map(m=><option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{color:C.muted,fontSize:12}}>Año</label>
+              <select style={INP} value={anio} onChange={e=>setAnio(+e.target.value)}>
+                {anios.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>% Avance de Obra</label>

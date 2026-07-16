@@ -141,6 +141,7 @@ export default function App(){
     <LoginScreen usuarios={usuarios} onLogin={u=>{
       setUsuario(u);
       setTab(u.rol==="Directivo"?"dashboard":"nuevo");
+      cargarTodo();
     }}/>
   );
 
