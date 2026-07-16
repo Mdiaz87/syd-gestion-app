@@ -2880,7 +2880,7 @@ export default function App(){
         )}
         {tab==="consultas"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<ConsultasPanel reports={reports} usuario={usuario}/>}
         {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
-        {tab==="destinatarios"&&(
+        {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
             <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Destinatarios por Proyecto</h2>
             <div style={{display:"grid",gap:10}}>
