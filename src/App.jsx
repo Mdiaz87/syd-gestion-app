@@ -183,7 +183,7 @@ function generarHTMLInforme(report, soloContenido=false){
   const tipoLabel={semanal:"Informe Semanal",mensual:"Informe Mensual",trimestral:"Informe Trimestral"}[report.type]||report.type;
   const fmtN=n=>n?new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(+n):"-";
   const estC={Aprobado:"#3aaa6e",Pendiente:"#f5a623",Rechazado:"#e05252"};
-  const avO=report.avanceObra||0, avR=report.avanceRecursos||0;
+  const avO=report.avanceObra||0, avR=Math.max(0,Math.min(100,+report.avanceRecursos||0));
   const sec=(t,c="#1b3a6b")=>`<h2 style="color:${c};font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:20px 0 10px;padding-left:10px;border-left:3px solid ${c}">${t}</h2>`;
   const thStyle=`padding:7px 8px;color:#1b3a6b;text-align:left;border-bottom:2px solid #dde3ee;font-size:11px;white-space:nowrap`;
   const tableWrap=(heads,rows)=>`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f0f3f8">${heads.map(h=>`<th style="${thStyle}">${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -951,7 +951,10 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>% Recursos Ejecutados</label>
-            <input type="number" min={0} max={100} style={INP} value={avRec} onChange={e=>setAvRec(e.target.value)}/>
+            <input type="number" min={0} max={100} style={INP} value={avRec} onChange={e=>{
+              const v=e.target.value;
+              setAvRec(v===""?"":Math.max(0,Math.min(100,+v)));
+            }}/>
           </div>
         </div>
       </Card>
@@ -1337,7 +1340,8 @@ function verImprimirInforme(report){
 }
 
 function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
-  const efic=(report.avanceObra||0)-(report.avanceRecursos||0);
+  const avanceRecursos=Math.max(0,Math.min(100,+report.avanceRecursos||0));
+  const efic=(report.avanceObra||0)-avanceRecursos;
   const st=semaforo(report.avanceObra,report.avanceRecursos,null,null,null,null);
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
   return (
@@ -1362,9 +1366,9 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.muted,fontSize:13}}>Avance de Obra</span><b style={{color:C.blue}}>{report.avanceObra||0}%</b></div>
           <Bar value={report.avanceObra} color={C.yellow}/>
         </div>
-        {report.avanceRecursos>0&&<div style={{marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.muted,fontSize:13}}>Recursos Ejecutados</span><b style={{color:C.blueMid}}>{report.avanceRecursos}%</b></div>
-          <Bar value={report.avanceRecursos} color={C.blueMid}/>
+        {avanceRecursos>0&&<div style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.muted,fontSize:13}}>Recursos Ejecutados</span><b style={{color:C.blueMid}}>{avanceRecursos}%</b></div>
+          <Bar value={avanceRecursos} color={C.blueMid}/>
         </div>}
         <div style={{background:C.bgCard2,borderRadius:8,padding:10,fontSize:13,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between"}}>
