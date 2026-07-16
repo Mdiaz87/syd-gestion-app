@@ -603,6 +603,13 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
 
   // modo: "borrador" | "enviado" | "edicion"
   const doSubmit=async(modo="borrador")=>{
+    if(modo!=="borrador"){
+      const tieneActividad=days.some(d=>d.activities.some(a=>a.actividad));
+      if(!tieneActividad){
+        alert("⚠️ Agrega al menos una actividad en algún día antes de enviar el informe.");
+        return;
+      }
+    }
     setSending(true);
     const now=new Date().toISOString();
     const semana=initial?.semana||getMondayStr();
@@ -908,6 +915,15 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
   const estColor={Aprobado:C.green,Pendiente:C.warn,Rechazado:C.danger};
 
   const doSubmit=async()=>{
+    if(!mes.trim()){
+      alert("⚠️ Completa el campo \"Mes / Período\" antes de enviar el informe.");
+      return;
+    }
+    const tieneContenido=frentes.some(f=>f.descripcion?.trim())||financiero.some(f=>+f.presupuesto>0||+f.ejecutado>0);
+    if(!tieneContenido){
+      alert("⚠️ Agrega al menos una descripción en un frente de trabajo o datos financieros antes de enviar el informe.");
+      return;
+    }
     setSending(true);
     const now=new Date().toISOString();
     const baseReport={
