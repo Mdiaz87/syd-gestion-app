@@ -1774,14 +1774,9 @@ function ReportsTable({reports,onSelect,onEdit,onDelete,usuario}){
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({reports}){
+function Dashboard({reports,presupuestos}){
   const byProj={};
   PROJECTS.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
-
-  const [presupuestos,setPresupuestos]=useState([]);
-  useEffect(()=>{
-    loadAllPresupuestoProyecto().then(data=>setPresupuestos(data));
-  },[]);
 
   const presByProject=useMemo(()=>{
     const acc={};
@@ -2188,7 +2183,7 @@ function ResultadoConsulta({resultado,onExportCSV,fmtMes}){
   );
 }
 
-function ConsultasPanel({reports,usuario}){
+function ConsultasPanel({reports,usuario,presupuestos}){
   const RECIENTES_KEY=`syd_consultas_${usuario.id}`;
   const lsGet=()=>{try{return JSON.parse(localStorage.getItem(RECIENTES_KEY)||'[]');}catch{return[];}};
   const lsSet=items=>localStorage.setItem(RECIENTES_KEY,JSON.stringify(items));
@@ -2199,9 +2194,6 @@ function ConsultasPanel({reports,usuario}){
   const [filtCat,setFiltCat]=useState('');
   const [resultado,setResultado]=useState(null);
   const [recientes,setRecientes]=useState(lsGet);
-  const [presupuestos,setPresupuestos]=useState([]);
-
-  useEffect(()=>{loadAllPresupuestoProyecto().then(d=>setPresupuestos(d||[]));},[]);
 
   const misProyectos=useMemo(()=>{
     if(usuario.rol==='Directivo') return PROJECTS;
@@ -2662,6 +2654,7 @@ export default function App(){
   const [localOrfanos,setLocalOrfanos]=useState([]);
   const [importando,setImportando]=useState(false);
   const [loadError,setLoadError]=useState(false);
+  const [presupuestos,setPresupuestos]=useState([]);
 
   const borradorSemana=useMemo(()=>{
     if(!usuario||usuario.rol!=="Coordinador") return null;
@@ -2677,9 +2670,9 @@ export default function App(){
   const cargarTodo=async()=>{
     setLoading(true);
     setLoadError(false);
-    const [r,d,u] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios()]);
+    const [r,d,u,pres] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios(), loadAllPresupuestoProyecto()]);
     // Siempre restaurar usuarios y sesión aunque los informes fallen
-    setDestinatarios(d); setUsuarios(u);
+    setDestinatarios(d); setUsuarios(u); setPresupuestos(pres||[]);
     const saved = sessionStorage.getItem("syd_usuario");
     if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
     if(r===null){
@@ -2827,7 +2820,7 @@ export default function App(){
             )}
           </div>
         )}
-        {tab==="dashboard"&&<Dashboard reports={reports}/>}
+        {tab==="dashboard"&&<Dashboard reports={reports} presupuestos={presupuestos}/>}
       {tab==="informes"&&(
         <div>
           {loadError&&(
@@ -2894,7 +2887,7 @@ export default function App(){
             {directivoForm==="ing"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
           </div>
         )}
-        {tab==="consultas"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<ConsultasPanel reports={reports} usuario={usuario}/>}
+        {tab==="consultas"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<ConsultasPanel reports={reports} usuario={usuario} presupuestos={presupuestos}/>}
         {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
