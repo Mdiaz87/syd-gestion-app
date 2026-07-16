@@ -1042,7 +1042,7 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
       <Card style={{marginBottom:16}}>
         <SectionTitle color={C.blue}>Resumen Financiero Global del Proyecto</SectionTitle>
         {[{key:"pre_operativa",label:"PRE OPERATIVA",icon:"📋"},{key:"operativa",label:"OPERATIVA",icon:"⚙️"}].map(({key:faseKey,label:faseLabel,icon:faseIcon})=>{
-          const items=financiero.map((f,ii)=>({...f,_ii:ii})).filter(f=>f.fase===faseKey);
+          const items=financiero.map((f,ii)=>({...f,_ii:ii})).filter(f=>(f.fase||"operativa")===faseKey);
           const subPres=items.reduce((s,f)=>s+(+f.presupuesto||0),0);
           const subAcum=items.reduce((s,f)=>s+(cumAnterior[f.item]||0)+(+f.ejecutado||0),0);
           const subPct=subPres>0?subAcum/subPres*100:0;
