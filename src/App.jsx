@@ -2202,6 +2202,7 @@ function ConsultasPanel({reports,usuario}){
 
   const consultar=()=>{
     if(!filtProj) return;
+    if(!misProyectos.includes(filtProj)) return;
     guardarReciente({proj:filtProj,tipo:filtTipo,periodo:filtPeriodo,cat:filtCat});
 
     if(filtTipo==='Financiero'){
@@ -2248,6 +2249,7 @@ function ConsultasPanel({reports,usuario}){
   };
 
   const consultarComparativa=()=>{
+    if(usuario.rol!=='Directivo') return;
     if(!filtCat) return;
     const rows=PROJECTS.map(proj=>{
       const pres=presupuestos.find(p=>p.project===proj&&p.categoria===filtCat);
@@ -2284,6 +2286,7 @@ function ConsultasPanel({reports,usuario}){
 
   const resumenGeneral=()=>{
     if(!filtProj) return;
+    if(!misProyectos.includes(filtProj)) return;
     const cumByMes={};
     reports.filter(r=>r.role==='Ingeniero'&&r.project===filtProj&&r.date).forEach(r=>{
       const m=r.date.substring(0,7);
