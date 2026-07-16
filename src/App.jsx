@@ -234,10 +234,13 @@ function generarHTMLInforme(report, soloContenido=false){
     const pct=pres>0?ejec/pres*100:0;
     const balance=pres-ejec;
     const barColor=pct>100?"#e05252":pct>=90?"#3aaa6e":pct>=60?"#f5a623":"#e05252";
-    const balHtml=pres&&ejec?(balance>0?`<span style="color:#3aaa6e;font-weight:700">💚 Ahorro: ${fmtN(balance)}</span>`:balance<0?`<span style="color:#e05252;font-weight:700">🔴 Sobrecosto: ${fmtN(Math.abs(balance))}</span>`:`<span style="color:#7a90b0">En punto</span>`):"-";
+    const balHtml=pres&&ejec?(balance<0?`<span style="color:#e05252;font-weight:700">🔴 Sobrecosto: ${fmtN(Math.abs(balance))}</span>`:balance>0?(f.finalizado?`<span style="color:#3aaa6e;font-weight:700">💚 Ahorro: ${fmtN(balance)}</span>`:`<span style="color:#2d5fa6;font-weight:700">🔷 Saldo disponible: ${fmtN(balance)}</span>`):`<span style="color:#7a90b0">En punto</span>`):"-";
     return `<tr style="border-bottom:1px solid #dde3ee"><td style="font-weight:600;color:#1b3a6b;font-size:11px;padding:10px 8px">${f.item}</td><td style="text-align:right;padding:10px 8px">${fmtN(pres)}</td><td style="text-align:right;padding:10px 8px">${fmtN(ejec)}</td><td style="padding:10px 8px;min-width:140px">${pres?`<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#dde3ee;border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.min(pct,100).toFixed(1)}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="color:${barColor};font-weight:700;font-size:10px;white-space:nowrap">Ejec: ${pct.toFixed(1)}%</span></div>${pct<=100&&ejec?`<div style="color:#7a90b0;font-size:10px;margin-top:3px">Por ejec: ${(100-pct).toFixed(1)}%</div>`:""}`:"−"}</td><td style="padding:10px 8px">${balHtml}</td></tr>`;
   }).join("");
-  const finTotalRow=finTotalPres?`<tr style="background:#f0f3f8;font-weight:700"><td style="color:#1b3a6b;padding:10px 8px;font-size:11px">TOTAL GENERAL</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalPres)}</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalEjec)}</td><td style="padding:10px 8px;min-width:140px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#dde3ee;border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.min(finTotalPct,100).toFixed(1)}%;height:100%;background:${finTotalBarColor};border-radius:3px"></div></div><span style="color:${finTotalBarColor};font-weight:700;font-size:10px;white-space:nowrap">Ejec: ${finTotalPct.toFixed(1)}%</span></div>${finTotalPct<=100&&finTotalEjec?`<div style="color:#7a90b0;font-size:10px;margin-top:3px">Por ejec: ${(100-finTotalPct).toFixed(1)}%</div>`:""}</td><td style="padding:10px 8px"></td></tr>`:"";
+  const finTotalBalance=finTotalPres-finTotalEjec;
+  const finTodoFinalizado=finItems.length>0&&finItems.every(f=>f.finalizado);
+  const finTotalBalHtml=finTotalEjec>0?(finTotalBalance<0?`<span style="color:#e05252;font-weight:700">🔴 Sobrecosto: ${fmtN(Math.abs(finTotalBalance))}</span>`:finTotalBalance>0?(finTodoFinalizado?`<span style="color:#3aaa6e;font-weight:700">💚 Ahorro: ${fmtN(finTotalBalance)}</span>`:`<span style="color:#2d5fa6;font-weight:700">🔷 Saldo disponible: ${fmtN(finTotalBalance)}</span>`):`<span style="color:#7a90b0">En punto</span>`):"";
+  const finTotalRow=finTotalPres?`<tr style="background:#f0f3f8;font-weight:700"><td style="color:#1b3a6b;padding:10px 8px;font-size:11px">TOTAL GENERAL</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalPres)}</td><td style="text-align:right;padding:10px 8px;color:#1b3a6b">${fmtN(finTotalEjec)}</td><td style="padding:10px 8px;min-width:140px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#dde3ee;border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.min(finTotalPct,100).toFixed(1)}%;height:100%;background:${finTotalBarColor};border-radius:3px"></div></div><span style="color:${finTotalBarColor};font-weight:700;font-size:10px;white-space:nowrap">Ejec: ${finTotalPct.toFixed(1)}%</span></div>${finTotalPct<=100&&finTotalEjec?`<div style="color:#7a90b0;font-size:10px;margin-top:3px">Por ejec: ${(100-finTotalPct).toFixed(1)}%</div>`:""}</td><td style="padding:10px 8px">${finTotalBalHtml}</td></tr>`:"";
   const financieroHTML=finRows?`${sec("Resumen Financiero Global")}<div style="background:#fff;border-radius:10px;border:1px solid #dde3ee;padding:14px;overflow-x:auto">${tableWrap(["Ítem","Presupuesto","Ejecutado","Progreso","Balance"],finRows+finTotalRow)}</div>`:"";
 
   // Trámites
@@ -1061,8 +1064,18 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
                   <div key={f.isCustom?(f.id||ii):f.item} style={{borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
                     <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
                       {f.isCustom
-                        ?<input style={{...INP,width:150,flexShrink:0,padding:"4px 8px",fontSize:12,marginTop:14}} placeholder="Nombre categoría..." value={f.item} onChange={e=>setFin(ii,"item",e.target.value)}/>
-                        :<div style={{width:155,color:C.blue,fontWeight:700,fontSize:12,paddingTop:18,flexShrink:0}}>{f.item}</div>
+                        ?<div style={{width:150,flexShrink:0}}>
+                            <input style={{...INP,padding:"4px 8px",fontSize:12,marginTop:14}} placeholder="Nombre categoría..." value={f.item} onChange={e=>setFin(ii,"item",e.target.value)}/>
+                            <label style={{display:"flex",alignItems:"center",gap:5,marginTop:6,fontSize:11,color:C.muted,cursor:"pointer"}}>
+                              <input type="checkbox" checked={!!f.finalizado} onChange={e=>setFin(ii,"finalizado",e.target.checked)}/> Finalizado
+                            </label>
+                          </div>
+                        :<div style={{width:155,flexShrink:0}}>
+                            <div style={{color:C.blue,fontWeight:700,fontSize:12,paddingTop:18}}>{f.item}</div>
+                            <label style={{display:"flex",alignItems:"center",gap:5,marginTop:6,fontSize:11,color:C.muted,cursor:"pointer"}}>
+                              <input type="checkbox" checked={!!f.finalizado} onChange={e=>setFin(ii,"finalizado",e.target.checked)}/> Finalizado
+                            </label>
+                          </div>
                       }
                       <div style={{flex:1,minWidth:100}}>
                         <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Presupuesto (COP)</div>
@@ -1078,10 +1091,12 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
                       </div>
                       {pres>0&&acum>0&&(
                         <div style={{minWidth:100,textAlign:"center",paddingTop:16}}>
-                          {balance>0
-                            ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 SALDO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
-                            :balance<0
-                              ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
+                          {balance<0
+                            ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(balance))}</span></div>
+                            :balance>0
+                              ?(f.finalizado
+                                  ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 AHORRO<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>
+                                  :<div style={{color:C.blueMid,fontWeight:700,fontSize:11}}>🔷 SALDO DISPONIBLE<br/><span style={{fontSize:12}}>{fmt(balance)}</span></div>)
                               :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
                           }
                         </div>
@@ -1121,6 +1136,9 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
           const totalPct=totalPres>0?totalAcum/totalPres*100:0;
           const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
           if(!totalPres&&!totalAcum) return null;
+          const totalBalance=totalPres-totalAcum;
+          const itemsConPresupuesto=financiero.filter(f=>+f.presupuesto>0);
+          const todoFinalizado=itemsConPresupuesto.length>0&&itemsConPresupuesto.every(f=>f.finalizado);
           return (
             <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:8}}>
               <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
@@ -1137,7 +1155,17 @@ function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
                   <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Acumulado histórico</div>
                   <div style={{...INP,padding:"4px 8px",fontSize:12,background:C.blue+"10",fontWeight:700,color:C.blue,cursor:"default"}}>{fmt(totalAcum)}</div>
                 </div>
-                <div style={{minWidth:100}}/>
+                <div style={{minWidth:100,textAlign:"center",paddingTop:16}}>
+                  {totalPres>0&&totalAcum>0&&(
+                    totalBalance<0
+                      ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 SOBRECOSTO<br/><span style={{fontSize:12}}>{fmt(Math.abs(totalBalance))}</span></div>
+                      :totalBalance>0
+                        ?(todoFinalizado
+                            ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 AHORRO<br/><span style={{fontSize:12}}>{fmt(totalBalance)}</span></div>
+                            :<div style={{color:C.blueMid,fontWeight:700,fontSize:11}}>🔷 SALDO<br/><span style={{fontSize:12}}>{fmt(totalBalance)}</span></div>)
+                        :<div style={{color:C.muted,fontSize:11,paddingTop:4}}>En punto</div>
+                  )}
+                </div>
               </div>
               <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
                 <div style={{flex:1,background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
@@ -1458,10 +1486,12 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
                   </div>
                   {pres>0&&ejec>0&&(
                     <div style={{textAlign:"right",minWidth:110}}>
-                      {balance>0
-                        ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 Ahorro: {fmt(balance)}</div>
-                        :balance<0
-                          ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 Sobrecosto: {fmt(Math.abs(balance))}</div>
+                      {balance<0
+                        ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 Sobrecosto: {fmt(Math.abs(balance))}</div>
+                        :balance>0
+                          ?(f.finalizado
+                              ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 Ahorro: {fmt(balance)}</div>
+                              :<div style={{color:C.blueMid,fontWeight:700,fontSize:11}}>🔷 Saldo disponible: {fmt(balance)}</div>)
                           :<div style={{color:C.muted,fontSize:11}}>En punto</div>
                       }
                     </div>
@@ -1488,6 +1518,8 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
             const totalPct=totalPres>0?totalEjec/totalPres*100:0;
             const barColor=totalPct>100?C.danger:totalPct>=90?C.green:totalPct>=60?C.warn:C.danger;
             if(!totalPres) return null;
+            const totalBalance=totalPres-totalEjec;
+            const todoFinalizado=items.length>0&&items.every(f=>f.finalizado);
             return (
               <div style={{borderTop:`2px solid ${C.blue}33`,paddingTop:10,marginTop:4}}>
                 <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
@@ -1496,6 +1528,18 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
                     <div style={{fontSize:11,color:C.muted}}>Presupuesto: <span style={{color:C.blue,fontWeight:700}}>{fmt(totalPres)}</span></div>
                     <div style={{fontSize:11,color:C.muted}}>Ejecutado: <span style={{color:C.blue,fontWeight:700}}>{fmt(totalEjec)}</span></div>
                   </div>
+                  {totalEjec>0&&(
+                    <div style={{textAlign:"right",minWidth:110}}>
+                      {totalBalance<0
+                        ?<div style={{color:C.danger,fontWeight:700,fontSize:11}}>🔴 Sobrecosto: {fmt(Math.abs(totalBalance))}</div>
+                        :totalBalance>0
+                          ?(todoFinalizado
+                              ?<div style={{color:C.green,fontWeight:700,fontSize:11}}>💚 Ahorro: {fmt(totalBalance)}</div>
+                              :<div style={{color:C.blueMid,fontWeight:700,fontSize:11}}>🔷 Saldo disponible: {fmt(totalBalance)}</div>)
+                          :<div style={{color:C.muted,fontSize:11}}>En punto</div>
+                      }
+                    </div>
+                  )}
                 </div>
                 <div style={{marginTop:8,display:"flex",alignItems:"center",gap:10}}>
                   <div style={{flex:1,background:C.border,borderRadius:4,height:6,overflow:"hidden"}}>
