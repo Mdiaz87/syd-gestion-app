@@ -1362,6 +1362,10 @@ function GraficasFinanciero({financiero, tramites, cumAnterior}){
 }
 
 // ── DETAIL ────────────────────────────────────────────────────────────────────
+function puedeGestionar(report,usuario){
+  return usuario?.rol==="Directivo" || report.author===usuario?.nombre;
+}
+
 function verImprimirInforme(report){
   const html = generarHTMLInforme(report);
   const w = window.open("","_blank");
@@ -1380,8 +1384,8 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         {onBack&&<button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer"}}>← Volver</button>}
         <button onClick={()=>verImprimirInforme(report)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🖨️ Ver / Exportar PDF</button>
-        {onEdit&&<button onClick={()=>onEdit(report)} style={{background:"none",border:`1px solid ${C.blueMid}`,color:C.blueMid,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>✏️ Editar</button>}
-        {onDelete&&<button onClick={()=>onDelete(report)} style={{background:"none",border:`1px solid ${C.danger}`,color:C.danger,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🗑️ Eliminar</button>}
+        {onEdit&&puedeGestionar(report,usuario)&&<button onClick={()=>onEdit(report)} style={{background:"none",border:`1px solid ${C.blueMid}`,color:C.blueMid,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>✏️ Editar</button>}
+        {onDelete&&puedeGestionar(report,usuario)&&<button onClick={()=>onDelete(report)} style={{background:"none",border:`1px solid ${C.danger}`,color:C.danger,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🗑️ Eliminar</button>}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div>
@@ -1636,7 +1640,7 @@ function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
 const TC={semanal:C.green,mensual:C.blueMid,trimestral:C.yellow};
 const TIPO_LABEL={semanal:"Semanal",mensual:"Mensual",trimestral:"Trimestral"};
 
-function ReportsTable({reports,onSelect,onEdit,onDelete}){
+function ReportsTable({reports,onSelect,onEdit,onDelete,usuario}){
   const [search,setSearch]=useState("");
   const [fProyecto,setFProyecto]=useState("");
   const [fEstado,setFEstado]=useState("");
@@ -1702,6 +1706,7 @@ function ReportsTable({reports,onSelect,onEdit,onDelete}){
                   const tColor=TC[r.type]||C.muted;
                   const estColor=r.estado==="borrador"?C.warn:C.green;
                   const estLabel=r.estado==="borrador"?"En progreso":"Enviado";
+                  const gestionable=puedeGestionar(r,usuario);
                   return (
                     <tr key={r.id} onClick={()=>onSelect(r)} style={{cursor:"pointer",borderBottom:`1px solid ${C.border}`}}>
                       <td style={{padding:"9px 12px"}}>
@@ -1721,8 +1726,8 @@ function ReportsTable({reports,onSelect,onEdit,onDelete}){
                       <td style={{padding:"9px 12px"}}>
                         <div style={{display:"flex",gap:6,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
                           <button onClick={()=>verImprimirInforme(r)} title="Ver / PDF" style={{...BTN_SM,color:C.blue,borderColor:C.blue}}>🖨️</button>
-                          <button onClick={()=>onEdit(r)} title="Editar" style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️</button>
-                          <button onClick={()=>onDelete(r)} title="Eliminar" style={{...BTN_SM,color:C.danger,borderColor:C.danger}}>🗑️</button>
+                          {gestionable&&<button onClick={()=>onEdit(r)} title="Editar" style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️</button>}
+                          {gestionable&&<button onClick={()=>onDelete(r)} title="Eliminar" style={{...BTN_SM,color:C.danger,borderColor:C.danger}}>🗑️</button>}
                         </div>
                       </td>
                     </tr>
@@ -2703,6 +2708,7 @@ export default function App(){
   };
 
   const startEdit=(r)=>{
+    if(!puedeGestionar(r,usuario)) return;
     setEditingReport(r);
     setTab("nuevo");
     setSelected(null);
@@ -2711,6 +2717,7 @@ export default function App(){
   const cancelEdit=()=>setEditingReport(null);
 
   const confirmDelete=async()=>{
+    if(!puedeGestionar(deletingReport,usuario)){ setDeletingReport(null); return; }
     const updated = reports.filter(r=>r.id!==deletingReport.id);
     setReports(updated);
     await deleteReport(deletingReport.id);
@@ -2833,7 +2840,7 @@ export default function App(){
               </button>
             )}
           </div>
-          <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport}/>
+          <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario}/>
         </div>
       )}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
