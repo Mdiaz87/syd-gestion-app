@@ -565,6 +565,9 @@ function ActivityRow({act, onChange, onRemove}){
 // ── COORDINADOR FORM ──────────────────────────────────────────────────────────
 function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   const initial = editingReport;
+  // Informes de antes del sistema de semana única no tienen "estado" guardado;
+  // como ya fueron enviados en su momento, se tratan como "enviado" al editarlos.
+  const estadoActual = initial ? (initial.estado || "enviado") : undefined;
   const [project,setProject]=useState(initial?.project||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
@@ -774,13 +777,13 @@ function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
           {sent==="enviado"?"✅ Informe de la semana enviado y cerrado correctamente":sent==="edicion"?"✅ Edición guardada correctamente":"💾 Progreso guardado correctamente"}
         </div>
       )}
-      {initial?.estado==="enviado"&&(
+      {estadoActual==="enviado"&&(
         <button onClick={()=>doSubmit("edicion")} disabled={sending||!!sent}
           style={{width:"100%",background:sending||sent?C.border:C.blueMid,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.blueMid}55`}}>
           {sending?"Guardando...":"✏️ Guardar Edición"}
         </button>
       )}
-      {initial?.estado!=="enviado"&&(
+      {estadoActual!=="enviado"&&(
         <div style={{display:"flex",gap:10}}>
           <button onClick={()=>doSubmit("borrador")} disabled={sending||!!sent}
             style={{flex:1,background:sending||sent?C.border:C.bgCard2,color:sending||sent?C.muted:C.blueMid,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:10,padding:13,fontSize:14,cursor:sending||sent?"default":"pointer"}}>
