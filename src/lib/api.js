@@ -49,7 +49,7 @@ export async function saveDestinatarios(project, emails){
 
 // ── USUARIOS (Supabase Auth real — el PIN nunca se guarda en una tabla) ──────
 export async function loadUsuarios(){
-  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id').order('nombre');
+  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin').order('nombre');
   if(error){ console.error('Error cargando usuarios:', error); return []; }
   return data || [];
 }
@@ -60,8 +60,15 @@ export async function login(profile, pin){
     password: passwordFor(key, pin),
   });
   if(error){ console.error('Error verificando código:', error); return null; }
-  const { id, nombre, rol, activo } = profile;
-  return { id, nombre, rol, activo };
+  const { id, nombre, rol, activo, es_super_admin } = profile;
+  return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin };
+}
+// Solo puede usarla la cuenta marcada como es_super_admin en profiles —
+// corre en una Edge Function con la clave de servicio, nunca en el cliente.
+export async function resetearPinDeOtro(targetId){
+  const { data, error } = await supabase.functions.invoke('smooth-api', { body: { targetId } });
+  if(error){ console.error('Error reseteando código:', error); return null; }
+  return data?.pin || null;
 }
 export async function cambiarMiPin(nuevoPin){
   const { data: { user } } = await supabase.auth.getUser();

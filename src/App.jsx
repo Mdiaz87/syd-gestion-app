@@ -270,7 +270,7 @@ export default function App(){
           </div>
         )}
         {tab==="consultas"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<ConsultasPanel reports={reports} usuario={usuario} presupuestos={presupuestos}/>}
-        {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios}/>}
+        {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
             <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Destinatarios por Proyecto</h2>

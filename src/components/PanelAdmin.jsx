@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
-import { crearUsuario, editarUsuario, setUsuarioActivo } from "../lib/api.js";
+import { crearUsuario, editarUsuario, setUsuarioActivo, resetearPinDeOtro } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
 // ── PANEL ADMIN ───────────────────────────────────────────────────────────────
-export function PanelAdmin({usuarios, onUsuariosChange}){
+export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
   const [editando,setEditando]=useState(null);
   const [editNombre,setEditNombre]=useState("");
   const [editRol,setEditRol]=useState("");
@@ -12,6 +12,7 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
   const [showAdd,setShowAdd]=useState(false);
   const [addNombre,setAddNombre]=useState("");
   const [addRol,setAddRol]=useState("Coordinador");
+  const [reseteando,setReseteando]=useState(null);
 
   const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);};
   const saveEdit=async u=>{
@@ -22,6 +23,13 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
   const toggleActivo=async u=>{
     const ok=await setUsuarioActivo(u.id,!u.activo);
     if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,activo:!u.activo}:x));
+  };
+  const resetPin=async u=>{
+    setReseteando(u.id);
+    const pin=await resetearPinDeOtro(u.id);
+    setReseteando(null);
+    if(pin){ setNuevoPin({nombre:u.nombre,pin}); }
+    else alert("⚠️ No se pudo resetear el código. Intenta de nuevo.");
   };
   const addUser=async()=>{
     if(!addNombre.trim()) return;
@@ -43,7 +51,10 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
         <button onClick={()=>setShowAdd(true)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontWeight:600,fontSize:13}}>+ Agregar persona</button>
       </div>
       <div style={{color:C.muted,fontSize:12,marginBottom:16}}>
-        Cada persona cambia su propio código desde su sesión ("Cambiar mi código", arriba a la derecha). Si alguien lo olvidó y no puede entrar, hay que restablecerlo desde el dashboard de Supabase (Authentication → Users).
+        Cada persona cambia su propio código desde su sesión ("Cambiar mi código", arriba a la derecha).
+        {usuario?.esSuperAdmin
+          ? " Si alguien lo olvidó y no puede entrar, podés resetearlo vos mismo con el botón \"Resetear código\" de su fila."
+          : " Si alguien lo olvidó y no puede entrar, contactá a quien administra el sistema."}
       </div>
       {nuevoPin&&(
         <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:16,marginBottom:16}}>
@@ -103,6 +114,11 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
                   <button onClick={()=>startEdit(u)} style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️ Editar</button>
+                  {usuario?.esSuperAdmin&&u.id!==usuario.id&&(
+                    <button onClick={()=>resetPin(u)} disabled={reseteando===u.id} style={{...BTN_SM,color:C.warn,borderColor:C.warn}}>
+                      {reseteando===u.id?"Reseteando...":"🔑 Resetear código"}
+                    </button>
+                  )}
                   <button onClick={()=>toggleActivo(u)} style={{...BTN_SM,color:u.activo?C.danger:C.green,borderColor:u.activo?C.danger:C.green}}>{u.activo?"Desactivar":"Activar"}</button>
                 </div>
               </div>
