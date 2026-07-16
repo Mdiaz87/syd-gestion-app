@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
-import { crearUsuario, editarUsuario, setUsuarioActivo, regenerarPin } from "../lib/api.js";
+import { crearUsuario, editarUsuario, setUsuarioActivo } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
 // ── PANEL ADMIN ───────────────────────────────────────────────────────────────
@@ -23,10 +23,6 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
     const ok=await setUsuarioActivo(u.id,!u.activo);
     if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,activo:!u.activo}:x));
   };
-  const regenPin=async u=>{
-    const pin=await regenerarPin(u.id);
-    if(pin){ setNuevoPin({nombre:u.nombre,pin}); }
-  };
   const addUser=async()=>{
     if(!addNombre.trim()) return;
     const creado=await crearUsuario(addNombre.trim(),addRol);
@@ -45,6 +41,9 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <h2 style={{color:C.blue,margin:0,fontWeight:800}}>👥 Equipo</h2>
         <button onClick={()=>setShowAdd(true)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontWeight:600,fontSize:13}}>+ Agregar persona</button>
+      </div>
+      <div style={{color:C.muted,fontSize:12,marginBottom:16}}>
+        Cada persona cambia su propio código desde su sesión ("Cambiar mi código", arriba a la derecha). Si alguien lo olvidó y no puede entrar, hay que restablecerlo desde el dashboard de Supabase (Authentication → Users).
       </div>
       {nuevoPin&&(
         <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:16,marginBottom:16}}>
@@ -69,7 +68,7 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
               </select>
             </div>
           </div>
-          <div style={{color:C.muted,fontSize:12,marginBottom:12}}>El código se genera automáticamente y se muestra una sola vez.</div>
+          <div style={{color:C.muted,fontSize:12,marginBottom:12}}>El código se genera automáticamente y se muestra una sola vez. Si alguien olvida su código más adelante, puede cambiarlo él mismo desde su sesión ("Cambiar mi código" arriba a la derecha).</div>
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>{setShowAdd(false);setAddNombre("");}} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
             <button onClick={addUser} disabled={!addNombre.trim()}
@@ -104,7 +103,6 @@ export function PanelAdmin({usuarios, onUsuariosChange}){
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
                   <button onClick={()=>startEdit(u)} style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️ Editar</button>
-                  <button onClick={()=>regenPin(u)} style={{...BTN_SM,color:C.warn,borderColor:C.warn}}>🔑 Código</button>
                   <button onClick={()=>toggleActivo(u)} style={{...BTN_SM,color:u.activo?C.danger:C.green,borderColor:u.activo?C.danger:C.green}}>{u.activo?"Desactivar":"Activar"}</button>
                 </div>
               </div>

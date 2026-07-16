@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP } from "../lib/constants.js";
-import { verificarPin } from "../lib/api.js";
+import { login } from "../lib/api.js";
 import { SydLogo } from "./ui.jsx";
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
@@ -15,8 +15,10 @@ export function LoginScreen({usuarios, onLogin}){
   const [error,setError]=useState(false);
   const [verificando,setVerificando]=useState(false);
   const check=async()=>{
+    const profile=activos.find(u=>String(u.id)===selId);
+    if(!profile) return;
     setVerificando(true);
-    const u=await verificarPin(+selId, pin);
+    const u=await login(profile, pin);
     setVerificando(false);
     if(u){ onLogin(u); }
     else{ setError(true); setPin(""); }

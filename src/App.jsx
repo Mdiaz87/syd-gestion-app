@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
+import { supabase } from "./supabase.js";
 import { C, PROJECTS } from "./lib/constants.js";
 import { getMondayStr, exportarJSON, puedeGestionar } from "./lib/helpers.js";
-import { loadReports, saveReport, deleteReport, loadDestinatarios, saveDestinatarios, loadUsuarios, loadAllPresupuestoProyecto } from "./lib/api.js";
+import { loadReports, saveReport, deleteReport, loadDestinatarios, saveDestinatarios, loadUsuarios, loadAllPresupuestoProyecto, cambiarMiPin } from "./lib/api.js";
 import { enviarADrive } from "./lib/pdf.js";
-import { SydLogo, ConfirmModal, DestinatariosManager } from "./components/ui.jsx";
+import { SydLogo, ConfirmModal, DestinatariosManager, CambiarPinModal } from "./components/ui.jsx";
 import { CoordForm } from "./components/CoordForm.jsx";
 import { IngForm } from "./components/IngForm.jsx";
 import { ReportDetail } from "./components/ReportDetail.jsx";
@@ -32,6 +33,7 @@ export default function App(){
   const [importando,setImportando]=useState(false);
   const [loadError,setLoadError]=useState(false);
   const [presupuestos,setPresupuestos]=useState([]);
+  const [showCambiarPin,setShowCambiarPin]=useState(false);
 
   const borradorSemana=useMemo(()=>{
     if(!usuario||usuario.rol!=="Coordinador") return null;
@@ -50,8 +52,11 @@ export default function App(){
     const [r,d,u,pres] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios(), loadAllPresupuestoProyecto()]);
     // Siempre restaurar usuarios y sesión aunque los informes fallen
     setDestinatarios(d); setUsuarios(u); setPresupuestos(pres||[]);
-    const saved = sessionStorage.getItem("syd_usuario");
-    if(saved){ try{ const p=JSON.parse(saved); const v=u.find(x=>x.id===p.id&&x.activo); if(v) setUsuario(v); }catch(e){} }
+    const { data:{ session } } = await supabase.auth.getSession();
+    if(session){
+      const v=u.find(x=>x.id===session.user.id&&x.activo);
+      if(v) setUsuario(v);
+    }
     if(r===null){
       setLoadError(true);
       setLoading(false);
@@ -135,7 +140,6 @@ export default function App(){
   if(!usuario) return (
     <LoginScreen usuarios={usuarios} onLogin={u=>{
       setUsuario(u);
-      sessionStorage.setItem("syd_usuario",JSON.stringify(u));
       setTab(u.rol==="Directivo"?"dashboard":"nuevo");
     }}/>
   );
@@ -155,7 +159,8 @@ export default function App(){
             <div style={{color:C.text,fontSize:13,fontWeight:600}}>{usuario.nombre}</div>
             <div style={{color:C.muted,fontSize:11}}>{usuario.rol}</div>
           </div>
-          <button onClick={()=>{setUsuario(null);sessionStorage.removeItem("syd_usuario");}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
+          <button onClick={()=>setShowCambiarPin(true)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>🔑 Cambiar mi código</button>
+          <button onClick={async()=>{await supabase.auth.signOut();setUsuario(null);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
         </div>
       </div>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,padding:"0 24px",background:C.bgCard}}>
@@ -296,6 +301,9 @@ export default function App(){
       )}
       {showDest&&(
         <DestinatariosManager key={destProject} project={destProject} destinatarios={destinatarios} onSave={saveDest} onClose={()=>setShowDest(false)}/>
+      )}
+      {showCambiarPin&&(
+        <CambiarPinModal onClose={()=>setShowCambiarPin(false)}/>
       )}
       {deletingReport&&(
         <ConfirmModal

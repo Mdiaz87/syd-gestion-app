@@ -1,4 +1,12 @@
-import { supabase } from "../supabase.js";
+import { supabase, createScratchClient } from "../supabase.js";
+
+// Dominio real de la empresa: Supabase Auth exige un dominio con DNS válido,
+// no acepta dominios inventados. Las direcciones son sintéticas (no reciben
+// correo real), solo sirven como usuario para el login.
+const EMAIL_DOMAIN = "sydinversiones.com";
+const emailFor = (key) => `syd-user-${key}@${EMAIL_DOMAIN}`;
+const passwordFor = (key, pin) => `syd-${key}-${pin}`;
+const genPin = () => String(Math.floor(1000 + Math.random() * 9000));
 
 // ── INFORMES ──────────────────────────────────────────────────────────────────
 export async function loadReports(){
@@ -39,36 +47,55 @@ export async function saveDestinatarios(project, emails){
   return true;
 }
 
-// ── USUARIOS (vía RPC — nunca exponen el pin salvo al crear/regenerar) ────────
+// ── USUARIOS (Supabase Auth real — el PIN nunca se guarda en una tabla) ──────
 export async function loadUsuarios(){
-  const { data, error } = await supabase.rpc('listar_usuarios');
+  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id').order('nombre');
   if(error){ console.error('Error cargando usuarios:', error); return []; }
   return data || [];
 }
-export async function verificarPin(id, pin){
-  const { data, error } = await supabase.rpc('verificar_pin', { p_id:id, p_pin:pin });
+export async function login(profile, pin){
+  const key = profile.legacy_id || profile.id;
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: profile.email,
+    password: passwordFor(key, pin),
+  });
   if(error){ console.error('Error verificando código:', error); return null; }
-  return data?.[0] || null;
+  const { id, nombre, rol, activo } = profile;
+  return { id, nombre, rol, activo };
+}
+export async function cambiarMiPin(nuevoPin){
+  const { data: { user } } = await supabase.auth.getUser();
+  if(!user) return false;
+  const { data: profile, error: profileError } = await supabase.from('profiles').select('id,legacy_id').eq('id', user.id).single();
+  if(profileError || !profile) { console.error('Error leyendo perfil propio:', profileError); return false; }
+  const key = profile.legacy_id || profile.id;
+  const { error } = await supabase.auth.updateUser({ password: passwordFor(key, nuevoPin) });
+  if(error){ console.error('Error cambiando código:', error); return false; }
+  return true;
 }
 export async function crearUsuario(nombre, rol){
-  const { data, error } = await supabase.rpc('crear_usuario', { p_nombre:nombre, p_rol:rol });
-  if(error){ console.error('Error creando usuario:', error); return null; }
-  return data?.[0] || null;
+  const scratch = createScratchClient();
+  const pin = genPin();
+  const key = crypto.randomUUID();
+  const email = emailFor(key);
+  const { data: signUpData, error: signUpError } = await scratch.auth.signUp({
+    email, password: passwordFor(key, pin),
+  });
+  if(signUpError || !signUpData.user){ console.error('Error creando usuario:', signUpError); return null; }
+  const id = signUpData.user.id;
+  const { error: profileError } = await scratch.from('profiles').insert({ id, nombre, rol, activo:true, email, legacy_id:key });
+  if(profileError){ console.error('Error creando perfil:', profileError); return null; }
+  return { id, nombre, rol, pin };
 }
 export async function editarUsuario(id, nombre, rol){
-  const { error } = await supabase.rpc('editar_usuario', { p_id:id, p_nombre:nombre, p_rol:rol });
+  const { error } = await supabase.from('profiles').update({ nombre, rol }).eq('id', id);
   if(error){ console.error('Error editando usuario:', error); return false; }
   return true;
 }
 export async function setUsuarioActivo(id, activo){
-  const { error } = await supabase.rpc('set_usuario_activo', { p_id:id, p_activo:activo });
+  const { error } = await supabase.from('profiles').update({ activo }).eq('id', id);
   if(error){ console.error('Error activando/desactivando usuario:', error); return false; }
   return true;
-}
-export async function regenerarPin(id){
-  const { data, error } = await supabase.rpc('regenerar_pin', { p_id:id });
-  if(error){ console.error('Error regenerando código:', error); return null; }
-  return data || null;
 }
 
 // ── PRESUPUESTO POR PROYECTO ──────────────────────────────────────────────────

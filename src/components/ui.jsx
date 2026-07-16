@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { C, INP, BTN_SM, SEM_COLOR, SEM_LABEL, ACTIVIDADES_CATALOGO, MACHINES, OPERADORES_OPTS, UNIDADES, ETAPAS } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
+import { cambiarMiPin } from "../lib/api.js";
 
 // ── LOGO ──────────────────────────────────────────────────────────────────────
 export function SydLogo({size=44}){
@@ -42,6 +43,57 @@ export function SectionTitle({children,color}){
 }
 export function Card({children,style={},borderColor}){
   return <div style={{background:C.bgCard,borderRadius:12,padding:16,border:`1px solid ${borderColor||C.border}`,boxShadow:"0 1px 4px #0001",...style}}>{children}</div>;
+}
+
+export function CambiarPinModal({onClose}){
+  const [pin,setPin]=useState("");
+  const [pin2,setPin2]=useState("");
+  const [guardando,setGuardando]=useState(false);
+  const [error,setError]=useState("");
+  const [ok,setOk]=useState(false);
+  const guardar=async()=>{
+    if(pin.length!==4){ setError("El código debe tener 4 dígitos."); return; }
+    if(pin!==pin2){ setError("Los dos códigos no coinciden."); return; }
+    setError(""); setGuardando(true);
+    const exito=await cambiarMiPin(pin);
+    setGuardando(false);
+    if(exito) setOk(true);
+    else setError("No se pudo cambiar el código. Intenta de nuevo.");
+  };
+  return (
+    <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
+      <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:360,width:"100%",boxShadow:"0 10px 40px #0003"}}>
+        {ok?(
+          <>
+            <h3 style={{color:C.green,margin:"0 0 8px"}}>✅ Código actualizado</h3>
+            <p style={{color:C.text,fontSize:14,marginBottom:20}}>Tu código personal se cambió correctamente. Usalo la próxima vez que inicies sesión.</p>
+            <button onClick={onClose} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,width:"100%",cursor:"pointer",fontWeight:600}}>Entendido</button>
+          </>
+        ):(
+          <>
+            <h3 style={{color:C.blue,margin:"0 0 8px"}}>🔑 Cambiar mi código</h3>
+            <p style={{color:C.muted,fontSize:13,marginBottom:16}}>Elegí un código nuevo de 4 dígitos.</p>
+            <div style={{marginBottom:10}}>
+              <label style={{color:C.muted,fontSize:12}}>Código nuevo</label>
+              <input type="password" inputMode="numeric" maxLength={4} style={{...INP,textAlign:"center",fontSize:20,letterSpacing:6}} value={pin} onChange={e=>{setPin(e.target.value.replace(/[^0-9]/g,"").slice(0,4));setError("");}}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{color:C.muted,fontSize:12}}>Repetí el código nuevo</label>
+              <input type="password" inputMode="numeric" maxLength={4} style={{...INP,textAlign:"center",fontSize:20,letterSpacing:6}} value={pin2} onChange={e=>{setPin2(e.target.value.replace(/[^0-9]/g,"").slice(0,4));setError("");}}/>
+            </div>
+            {error&&<div style={{color:C.danger,fontSize:13,marginBottom:12}}>{error}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={onClose} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando||pin.length!==4||pin2.length!==4}
+                style={{background:guardando?C.border:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:guardando?"default":"pointer",fontWeight:600}}>
+                {guardando?"Guardando...":"Guardar"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ConfirmModal({title, message, onConfirm, onCancel}){
