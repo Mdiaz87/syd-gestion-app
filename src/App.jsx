@@ -450,19 +450,34 @@ async function saveDestinatarios(project, emails){
   return true;
 }
 async function loadUsuarios(){
-  const { data, error } = await supabase.from('usuarios').select('*').order('nombre');
+  const { data, error } = await supabase.rpc('listar_usuarios');
   if(error){ console.error('Error cargando usuarios:', error); return []; }
   return data || [];
 }
-async function saveUsuario(usuario){
-  const { error } = await supabase.from('usuarios').insert(usuario);
-  if(error){ console.error('Error guardando usuario:', error); return false; }
+async function verificarPin(id, pin){
+  const { data, error } = await supabase.rpc('verificar_pin', { p_id:id, p_pin:pin });
+  if(error){ console.error('Error verificando código:', error); return null; }
+  return data?.[0] || null;
+}
+async function crearUsuario(nombre, rol){
+  const { data, error } = await supabase.rpc('crear_usuario', { p_nombre:nombre, p_rol:rol });
+  if(error){ console.error('Error creando usuario:', error); return null; }
+  return data?.[0] || null;
+}
+async function editarUsuario(id, nombre, rol){
+  const { error } = await supabase.rpc('editar_usuario', { p_id:id, p_nombre:nombre, p_rol:rol });
+  if(error){ console.error('Error editando usuario:', error); return false; }
   return true;
 }
-async function updateUsuario(id, changes){
-  const { error } = await supabase.from('usuarios').update(changes).eq('id', id);
-  if(error){ console.error('Error actualizando usuario:', error); return false; }
+async function setUsuarioActivo(id, activo){
+  const { error } = await supabase.rpc('set_usuario_activo', { p_id:id, p_activo:activo });
+  if(error){ console.error('Error activando/desactivando usuario:', error); return false; }
   return true;
+}
+async function regenerarPin(id){
+  const { data, error } = await supabase.rpc('regenerar_pin', { p_id:id });
+  if(error){ console.error('Error regenerando código:', error); return null; }
+  return data || null;
 }
 async function loadPresupuestoProyecto(project){
   const { data, error } = await supabase.from('presupuesto_proyecto').select('*').eq('project', project).order('id', {ascending:true});
@@ -2446,9 +2461,12 @@ function LoginScreen({usuarios, onLogin}){
   const [selId,setSelId]=useState(()=>String(sorted[0]?.id||""));
   const [pin,setPin]=useState("");
   const [error,setError]=useState(false);
-  const check=()=>{
-    const u=activos.find(u=>String(u.id)===selId);
-    if(u&&pin===u.pin){ onLogin(u); }
+  const [verificando,setVerificando]=useState(false);
+  const check=async()=>{
+    setVerificando(true);
+    const u=await verificarPin(+selId, pin);
+    setVerificando(false);
+    if(u){ onLogin(u); }
     else{ setError(true); setPin(""); }
   };
 
@@ -2478,12 +2496,12 @@ function LoginScreen({usuarios, onLogin}){
               style={{...INP,textAlign:"center",fontSize:22,letterSpacing:6}}
               placeholder="••••" value={pin}
               onChange={e=>{setPin(e.target.value.replace(/[^0-9]/g,"").slice(0,4));setError(false);}}
-              onKeyDown={e=>e.key==="Enter"&&check()}/>
+              onKeyDown={e=>e.key==="Enter"&&pin.length===4&&!verificando&&check()}/>
           </div>
           {error&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>Código incorrecto. Intenta de nuevo.</div>}
-          <button onClick={check} disabled={pin.length!==4}
-            style={{background:pin.length===4?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4?"pointer":"not-allowed",width:"100%"}}>
-            Entrar
+          <button onClick={check} disabled={pin.length!==4||verificando}
+            style={{background:pin.length===4&&!verificando?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4&&!verificando?"pointer":"not-allowed",width:"100%"}}>
+            {verificando?"Verificando...":"Entrar"}
           </button>
         </>
       )}
@@ -2507,33 +2525,27 @@ function PanelAdmin({usuarios, onUsuariosChange}){
   const [addNombre,setAddNombre]=useState("");
   const [addRol,setAddRol]=useState("Coordinador");
 
-  const genPin=()=>{
-    const usados=usuarios.map(u=>u.pin);
-    let p; do{ p=String(Math.floor(1000+Math.random()*9000)); }while(usados.includes(p));
-    return p;
-  };
   const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);};
   const saveEdit=async u=>{
-    const ok=await updateUsuario(u.id,{nombre:editNombre,rol:editRol});
+    const ok=await editarUsuario(u.id,editNombre,editRol);
     if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,nombre:editNombre,rol:editRol}:x));
     setEditando(null);
   };
   const toggleActivo=async u=>{
-    const ok=await updateUsuario(u.id,{activo:!u.activo});
+    const ok=await setUsuarioActivo(u.id,!u.activo);
     if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,activo:!u.activo}:x));
   };
   const regenPin=async u=>{
-    const pin=genPin();
-    const ok=await updateUsuario(u.id,{pin});
-    if(ok){ onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,pin}:x)); setNuevoPin({nombre:u.nombre,pin}); }
+    const pin=await regenerarPin(u.id);
+    if(pin){ setNuevoPin({nombre:u.nombre,pin}); }
   };
   const addUser=async()=>{
     if(!addNombre.trim()) return;
-    const pin=genPin();
-    await saveUsuario({nombre:addNombre.trim(),rol:addRol,pin,activo:true});
-    const updated=await loadUsuarios();
-    onUsuariosChange(updated);
-    setNuevoPin({nombre:addNombre.trim(),pin});
+    const creado=await crearUsuario(addNombre.trim(),addRol);
+    if(creado){
+      onUsuariosChange([...usuarios,{id:creado.id,nombre:creado.nombre,rol:creado.rol,activo:true}]);
+      setNuevoPin({nombre:creado.nombre,pin:creado.pin});
+    }
     setShowAdd(false); setAddNombre(""); setAddRol("Coordinador");
   };
 
