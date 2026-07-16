@@ -1,11 +1,30 @@
 import React, { useState, useMemo } from "react";
 import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP } from "../lib/constants.js";
-import { fmt, semaforo } from "../lib/helpers.js";
+import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
 import { Badge, Bar } from "./ui.jsx";
+
+const DIAS_ALERTA_INGENIERO = 30;
 
 export function Dashboard({reports,presupuestos}){
   const byProj={};
   PROJECTS.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
+
+  const recordatorios=useMemo(()=>{
+    const semanaActual=getMondayStr();
+    const hoy=new Date();
+    const diasDesde=fecha=>fecha?Math.floor((hoy-new Date(fecha))/86400000):null;
+    return PROJECTS.map(proj=>{
+      const coordEnviado=reports.some(r=>r.role==="Coordinador"&&r.project===proj&&r.semana===semanaActual&&r.estado==="enviado");
+      const ultimoIng=reports.filter(r=>r.role==="Ingeniero"&&r.project===proj&&r.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+      const diasIng=diasDesde(ultimoIng?.date);
+      return {
+        proj,
+        coordPendiente:!coordEnviado,
+        ingAtrasado: diasIng===null||diasIng>DIAS_ALERTA_INGENIERO,
+        diasIng,
+      };
+    }).filter(r=>r.coordPendiente||r.ingAtrasado);
+  },[reports]);
 
   const presByProject=useMemo(()=>{
     const acc={};
@@ -48,6 +67,24 @@ export function Dashboard({reports,presupuestos}){
   return (
     <div>
       <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Dashboard Directivo</h2>
+
+      {recordatorios.length>0&&(
+        <div style={{background:C.warn+"12",border:`1px solid ${C.warn}55`,borderRadius:12,padding:16,marginBottom:24}}>
+          <div style={{color:C.warn,fontWeight:800,fontSize:14,marginBottom:10}}>📋 Recordatorios — Informes Pendientes</div>
+          <div style={{display:"grid",gap:6}}>
+            {recordatorios.map(r=>(
+              <div key={r.proj} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.bgCard,borderRadius:8,padding:"8px 12px",fontSize:12,flexWrap:"wrap",gap:6}}>
+                <span style={{color:C.text,fontWeight:600}}>{r.proj}</span>
+                <span style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {r.coordPendiente&&<span style={{color:C.warn}}>⚠️ Sin informe semanal de Coordinador esta semana</span>}
+                  {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: {r.diasIng===null?"nunca ha enviado un informe":`sin informe hace ${r.diasIng} días`}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
         {PROJECTS.map(proj=>{
           const reps=byProj[proj];

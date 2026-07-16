@@ -46,6 +46,12 @@ export default function App(){
     )||null;
   },[reports,usuario]);
 
+  const yaEnviadoEstaSemana=useMemo(()=>{
+    if(!usuario||usuario.rol!=="Coordinador") return false;
+    const semana=getMondayStr();
+    return reports.some(r=>r.role==="Coordinador"&&r.coordinadorId===usuario.id&&r.semana===semana&&r.estado==="enviado");
+  },[reports,usuario]);
+
   const cargarTodo=async()=>{
     setLoading(true);
     setLoadError(false);
@@ -250,6 +256,11 @@ export default function App(){
           <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario}/>
         </div>
       )}
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&!borradorSemana&&(
+          yaEnviadoEstaSemana
+            ? <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.green,fontWeight:600,fontSize:13}}>✅ Ya enviaste el informe de esta semana. Si necesitas corregir algo, hazlo desde "Ver Informes".</div>
+            : <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.warn,fontWeight:600,fontSize:13}}>📌 Recordatorio: aún no envías el informe semanal. No olvides enviarlo antes de que termine la semana.</div>
+        )}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
