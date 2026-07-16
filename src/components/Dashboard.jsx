@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RcTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP } from "../lib/constants.js";
 import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
 import { Badge, Bar } from "./ui.jsx";
@@ -240,6 +241,15 @@ export function Dashboard({reports,presupuestos}){
         const cellStyle={padding:"6px 10px",fontSize:11,borderBottom:`1px solid ${C.border}44`,textAlign:"right",whiteSpace:"nowrap"};
         const hStyle={padding:"6px 10px",fontSize:10,color:C.muted,fontWeight:700,textAlign:"right",whiteSpace:"nowrap",background:C.bgCard2};
         const fmtMes=m=>{const [y,mo]=m.split("-");const n=["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][+mo];return `${n}-${y.slice(2)}`;};
+        const curvaS=(()=>{
+          const byMes={};
+          reports.filter(r=>r.role==="Ingeniero"&&r.project===mesTabProj&&r.date).forEach(r=>{
+            const m=r.date.slice(0,7);
+            if(!byMes[m]) byMes[m]=[];
+            byMes[m].push(+r.avanceObra||0);
+          });
+          return Object.entries(byMes).map(([m,vals])=>({mes:m,mesLabel:fmtMes(m),avance:Math.max(...vals)})).sort((a,b)=>a.mes.localeCompare(b.mes));
+        })();
         return (
           <div style={{marginTop:32}}>
             <h3 style={{color:C.blue,fontWeight:800,marginBottom:12,fontSize:16}}>📅 Seguimiento Mensual de Ejecución</h3>
@@ -248,6 +258,26 @@ export function Dashboard({reports,presupuestos}){
                 <button key={p} onClick={()=>setMesTabProj(p)} style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${mesTabProj===p?C.blue:C.border}`,background:mesTabProj===p?C.blue:"transparent",color:mesTabProj===p?"#fff":C.muted,fontWeight:mesTabProj===p?700:400,fontSize:12,cursor:"pointer"}}>{p}</button>
               ))}
             </div>
+            {curvaS.length>1&&(
+              <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:24}}>
+                <div style={{color:C.blue,fontWeight:700,fontSize:13,marginBottom:12}}>📈 Curva S — Avance de Obra Acumulado ({mesTabProj})</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={curvaS} margin={{top:5,right:10,left:-10,bottom:0}}>
+                    <defs>
+                      <linearGradient id="curvaSFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={C.blue} stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor={C.blue} stopOpacity={0.02}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                    <XAxis dataKey="mesLabel" tick={{fontSize:11,fill:C.muted}}/>
+                    <YAxis domain={[0,100]} tick={{fontSize:11,fill:C.muted}} unit="%"/>
+                    <RcTooltip formatter={v=>[`${v}%`,"Avance acumulado"]}/>
+                    <Area type="monotone" dataKey="avance" stroke={C.blue} strokeWidth={2.5} fill="url(#curvaSFill)" dot={{r:3,fill:C.blue}}/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.border}`}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead>
