@@ -62,6 +62,23 @@ export function Dashboard({reports,presupuestos}){
     return alerts.sort((a,b)=>b.pct-a.pct);
   },[presByProject,cumByProject]);
 
+  const ranking=useMemo(()=>{
+    return PROJECTS.map(proj=>{
+      const reps=byProj[proj];
+      const last=reps[reps.length-1];
+      const cats=presByProject[proj]||[];
+      const acum=cumByProject[proj]||{};
+      const totalPres=cats.reduce((s,c)=>s+c.presupuesto,0);
+      const totalAcum=cats.reduce((s,c)=>s+(acum[c.categoria]||0),0);
+      const pctEjec=totalPres>0?totalAcum/totalPres*100:0;
+      const avanceObra=last?.avanceObra||0;
+      const avanceRecursos=last?.avanceRecursos||0;
+      const eficiencia=avanceObra-avanceRecursos;
+      const st=reps.length>0?semaforo(avanceObra,avanceRecursos,null,null,null,null):null;
+      return {proj,avanceObra,pctEjec,eficiencia,st,tieneReportes:reps.length>0};
+    }).sort((a,b)=>b.avanceObra-a.avanceObra);
+  },[byProj,presByProject,cumByProject]);
+
   const mensualByProject=useMemo(()=>{
     const acc={};
     reports.filter(r=>r.role==="Ingeniero"&&r.date).forEach(r=>{
@@ -113,6 +130,24 @@ export function Dashboard({reports,presupuestos}){
           </div>
         </div>
       )}
+
+      <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:24}}>
+        <div style={{color:C.blue,fontWeight:800,fontSize:14,marginBottom:12}}>🏆 Ranking de Proyectos — Avance de Obra</div>
+        <div style={{display:"grid",gap:6}}>
+          {ranking.map((r,i)=>(
+            <div key={r.proj} style={{display:"grid",gridTemplateColumns:"28px 1.4fr 1fr 90px 90px 90px",alignItems:"center",gap:10,background:C.bgCard2,borderRadius:8,padding:"8px 12px",fontSize:12,opacity:r.tieneReportes?1:0.5}}>
+              <span style={{color:i<3&&r.tieneReportes?C.yellow:C.muted,fontWeight:800,fontSize:13}}>#{i+1}</span>
+              <span style={{color:C.text,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.proj}</span>
+              <div style={{background:C.border,borderRadius:4,height:7,overflow:"hidden"}}>
+                <div style={{width:`${Math.min(r.avanceObra,100)}%`,height:"100%",background:C.yellow,borderRadius:4}}/>
+              </div>
+              <span style={{color:C.text,fontWeight:700,textAlign:"right"}}>{r.tieneReportes?`${r.avanceObra}% obra`:"sin datos"}</span>
+              <span style={{color:C.blueMid,fontWeight:700,textAlign:"right"}}>{r.pctEjec>0?`${r.pctEjec.toFixed(0)}% ejec.`:"—"}</span>
+              {r.st?<Badge status={r.st}/>:<span style={{color:C.muted,textAlign:"right"}}>—</span>}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
         {PROJECTS.map(proj=>{
