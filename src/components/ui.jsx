@@ -120,7 +120,14 @@ export function DestinatariosManager({project, destinatarios, onSave, onClose}){
     if(v && v.includes("@") && !emails.includes(v)){ setEmails([...emails,v]); setNuevo(""); }
   };
   const remove=(e)=>setEmails(emails.filter(x=>x!==e));
-  const save=()=>{ onSave(project,emails); onClose(); };
+  const save=()=>{
+    // Si quedó un correo escrito sin agregar con "+", lo incluimos igual
+    // para no guardar una lista vacía por error del usuario.
+    const v=nuevo.trim();
+    const finalEmails=(v && v.includes("@") && !emails.includes(v)) ? [...emails,v] : emails;
+    onSave(project,finalEmails);
+    onClose();
+  };
   return (
     <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
       <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:420,width:"100%",boxShadow:"0 10px 40px #0003"}}>
