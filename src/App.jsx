@@ -102,11 +102,11 @@ export default function App(){
       ? reports.map(x=>x.id===r.id?r:x)
       : [...reports,r];
     setReports(updated);
+    const dest = destinatarios[r.project]||[];
     const [ok, driveOk] = await Promise.all([
       saveReport(r, wasEditing),
-      enviarADrive(r)
+      enviarADrive(r, dest)
     ]);
-    const dest = destinatarios[r.project]||[];
     setSuccess({report:r, dest, saveError: !ok, driveOk, wasEditing});
     setEditingReport(null);
     setTimeout(()=>{ setSuccess(null); setTab("informes"); },6000);
@@ -199,11 +199,13 @@ export default function App(){
                 </div>
                 {success.dest.length>0?(
                   <div style={{color:C.text,fontSize:13,marginTop:6}}>
-                    📧 Para enviarlo por correo: <i>"envía el informe de {success.report.project}"</i><br/>
-                    <span style={{color:C.muted,fontSize:12}}>Destinatarios: {success.dest.join(", ")}</span>
+                    📧 {success.driveOk
+                      ? <span style={{color:C.green,fontWeight:600}}>Se notificó por correo a:</span>
+                      : <span style={{color:C.warn}}>No se pudo notificar por correo (falló el envío a Drive) a:</span>
+                    } <span style={{color:C.muted,fontSize:12}}>{success.dest.join(", ")}</span>
                   </div>
                 ):(
-                  <div style={{color:C.warn,fontSize:13,marginTop:6}}>⚠️ Sin destinatarios configurados para {success.report.project}.</div>
+                  <div style={{color:C.warn,fontSize:13,marginTop:6}}>⚠️ Sin destinatarios configurados para {success.report.project} — nadie recibirá aviso por correo.</div>
                 )}
               </>
             )}

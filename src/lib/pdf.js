@@ -106,7 +106,7 @@ export function generarHTMLInforme(report, soloContenido=false){
 </head><body>${cuerpo}</body></html>`;
 }
 
-export async function enviarADrive(report){
+export async function enviarADrive(report, destinatarios=[]){
   try{
     const sinFotos = JSON.parse(JSON.stringify(report));
     if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
@@ -158,7 +158,7 @@ export async function enviarADrive(report){
       method:'POST',
       mode:'no-cors',
       headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type, isEdit})
+      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type, isEdit, destinatarios, author:report.author})
     });
     return true;
   }catch(e){
