@@ -255,7 +255,7 @@ export default function App(){
               </button>
             )}
           </div>
-          <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario}/>
+          <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario} destinatarios={destinatarios}/>
         </div>
       )}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&!borradorSemana&&(

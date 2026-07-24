@@ -1,17 +1,25 @@
 import { useState, useMemo } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
 import { puedeGestionar } from "../lib/helpers.js";
-import { verImprimirInforme } from "../lib/pdf.js";
+import { verImprimirInforme, enviarADrive } from "../lib/pdf.js";
 import { Card } from "./ui.jsx";
 
 const TC={semanal:C.green,mensual:C.blueMid,trimestral:C.yellow};
 const TIPO_LABEL={semanal:"Semanal",mensual:"Mensual",trimestral:"Trimestral"};
 
-export function ReportsTable({reports,onSelect,onEdit,onDelete,usuario}){
+export function ReportsTable({reports,onSelect,onEdit,onDelete,usuario,destinatarios}){
   const [search,setSearch]=useState("");
   const [fProyecto,setFProyecto]=useState("");
   const [fEstado,setFEstado]=useState("");
   const [fTipo,setFTipo]=useState("");
+  const [reenviando,setReenviando]=useState({});
+
+  const reenviar=async(r)=>{
+    setReenviando(s=>({...s,[r.id]:"enviando"}));
+    const ok = await enviarADrive(r, (destinatarios&&destinatarios[r.project])||[]);
+    setReenviando(s=>({...s,[r.id]:ok?"ok":"error"}));
+    setTimeout(()=>setReenviando(s=>{const {[r.id]:_,...rest}=s; return rest;}),4000);
+  };
 
   const proyectos=useMemo(()=>[...new Set(reports.map(r=>r.project))].sort(),[reports]);
   const tipos=useMemo(()=>[...new Set(reports.map(r=>r.type).filter(Boolean))],[reports]);
@@ -91,10 +99,19 @@ export function ReportsTable({reports,onSelect,onEdit,onDelete,usuario}){
                         <span style={{background:estColor+"22",color:estColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${estColor}44`,whiteSpace:"nowrap"}}>{estLabel}</span>
                       </td>
                       <td style={{padding:"9px 12px"}}>
-                        <div style={{display:"flex",gap:6,whiteSpace:"nowrap"}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:"flex",gap:6,whiteSpace:"nowrap",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
                           <button onClick={()=>verImprimirInforme(r)} title="Ver / PDF" style={{...BTN_SM,color:C.blue,borderColor:C.blue}}>🖨️</button>
                           {gestionable&&<button onClick={()=>onEdit(r)} title="Editar" style={{...BTN_SM,color:C.blueMid,borderColor:C.blueMid}}>✏️</button>}
                           {gestionable&&<button onClick={()=>onDelete(r)} title="Eliminar" style={{...BTN_SM,color:C.danger,borderColor:C.danger}}>🗑️</button>}
+                          {usuario?.rol==="Directivo"&&(
+                            reenviando[r.id]==="enviando"
+                              ? <span style={{fontSize:11,color:C.muted}}>Enviando...</span>
+                              : reenviando[r.id]==="ok"
+                              ? <span style={{fontSize:11,color:C.green,fontWeight:700}}>✅ Enviado</span>
+                              : reenviando[r.id]==="error"
+                              ? <span style={{fontSize:11,color:C.danger,fontWeight:700}}>⚠️ Falló</span>
+                              : <button onClick={()=>reenviar(r)} title="Reenviar a Drive (regenera el PDF sin fotos si no las tenía guardadas)" style={{...BTN_SM,color:C.muted,borderColor:C.border}}>🔄</button>
+                          )}
                         </div>
                       </td>
                     </tr>
