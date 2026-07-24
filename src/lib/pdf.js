@@ -108,10 +108,6 @@ export function generarHTMLInforme(report, soloContenido=false){
 
 export async function enviarADrive(report, destinatarios=[]){
   try{
-    const sinFotos = JSON.parse(JSON.stringify(report));
-    if(sinFotos.days)    sinFotos.days    = sinFotos.days.map(d=>({...d,photos:[]}));
-    if(sinFotos.frentes) sinFotos.frentes = sinFotos.frentes.map(f=>({...f,photos:[]}));
-
     // Importar primero para que el bundle esté listo antes de tocar el DOM
     const html2pdf = (await import('html2pdf.js')).default;
 
@@ -120,7 +116,7 @@ export async function enviarADrive(report, destinatarios=[]){
     wrapper.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
     const contenedor = document.createElement('div');
     contenedor.style.cssText = 'width:794px;background:#f4f6f9;';
-    contenedor.innerHTML = generarHTMLInforme(sinFotos, true);
+    contenedor.innerHTML = generarHTMLInforme(report, true);
     wrapper.appendChild(contenedor);
     document.body.appendChild(wrapper);
 
@@ -154,13 +150,14 @@ export async function enviarADrive(report, destinatarios=[]){
       : `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
     const isEdit = report.estado==="enviado" && (report.history||[]).some(h=>h.accion==="Editado");
 
-    await fetch(GAS_URL, {
+    const res = await fetch(GAS_URL, {
       method:'POST',
-      mode:'no-cors',
       headers:{'Content-Type':'text/plain'},
       body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type, isEdit, destinatarios, author:report.author})
     });
-    return true;
+    const resultado = await res.json();
+    if(resultado.error){ console.error("Error del lado de Drive:", resultado.error); return false; }
+    return !!resultado.ok;
   }catch(e){
     console.error("Error enviando a Drive:", e);
     return false;
