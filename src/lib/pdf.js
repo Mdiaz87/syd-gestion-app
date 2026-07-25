@@ -164,6 +164,21 @@ export async function enviarADrive(report, destinatarios=[]){
   }
 }
 
+export async function enviarAlertaPresupuesto({project, categoria, presupuesto, ejecutado, pct, umbral, destinatarios}){
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({tipoAlerta:'presupuesto', project, categoria, presupuesto, ejecutado, pct, umbral, destinatarios})
+    });
+    const resultado = await res.json();
+    return !!resultado.ok;
+  }catch(e){
+    console.error("Error enviando alerta de presupuesto:", e);
+    return false;
+  }
+}
+
 export function verImprimirInforme(report){
   const html = generarHTMLInforme(report);
   const w = window.open("","_blank");

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS, MESES } from "../lib/constants.js";
 import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite } from "../lib/helpers.js";
-import { loadPresupuestoProyecto, savePresupuestoProyecto } from "../lib/api.js";
+import { loadPresupuestoProyecto, savePresupuestoProyecto, verificarAlertasPresupuesto } from "../lib/api.js";
 import { Card, SectionTitle, PhotoUpload, CurrencyInput, Bar } from "./ui.jsx";
 import { GraficasFinanciero } from "./GraficasFinanciero.jsx";
 
@@ -111,6 +111,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
       onSubmit(report, !!editingReport),
       savePresupuestoProyecto(project, financiero)
     ]);
+    verificarAlertasPresupuesto(project, financiero, cumAnterior);
     setSending(false);
     setSent(true);
     setTimeout(()=>setSent(false),3000);

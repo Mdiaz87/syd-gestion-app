@@ -1,4 +1,5 @@
 import { supabase, createScratchClient } from "../supabase.js";
+import { enviarAlertaPresupuesto } from "./pdf.js";
 
 // Dominio real de la empresa: Supabase Auth exige un dominio con DNS válido,
 // no acepta dominios inventados. Las direcciones son sintéticas (no reciben
@@ -128,4 +129,33 @@ export async function loadAllPresupuestoProyecto(){
   const { data, error } = await supabase.from('presupuesto_proyecto').select('*').order('project').order('id', {ascending:true});
   if(error){ console.error('Error cargando presupuestos:', error); return []; }
   return data || [];
+}
+
+// Revisa cada categoría del proyecto contra su presupuesto y dispara una
+// alerta por correo a los Directivos la primera vez que cruza 90% o 100%
+// (nunca se repite: queda marcada en alertado_90/alertado_100).
+export async function verificarAlertasPresupuesto(project, financiero, cumAnterior){
+  const { data: cats, error } = await supabase.from('presupuesto_proyecto').select('*').eq('project', project);
+  if(error || !cats) return;
+
+  const { data: directivos } = await supabase.from('profiles').select('email_notificaciones').eq('rol','Directivo').eq('activo',true);
+  const destinatarios = (directivos||[]).map(d=>d.email_notificaciones).filter(Boolean);
+  if(!destinatarios.length) return;
+
+  for(const cat of cats){
+    if(!cat.presupuesto || cat.presupuesto<=0) continue;
+    const item = financiero.find(f=>f.item===cat.categoria);
+    const ejecItem = item ? (+item.ejecutado||0) : 0;
+    const acumuladoAnterior = (cumAnterior && cumAnterior[cat.categoria]) || 0;
+    const ejecutado = acumuladoAnterior + ejecItem;
+    const pct = ejecutado/cat.presupuesto*100;
+
+    if(pct>=100 && !cat.alertado_100){
+      await enviarAlertaPresupuesto({project, categoria:cat.categoria, presupuesto:cat.presupuesto, ejecutado, pct, umbral:100, destinatarios});
+      await supabase.from('presupuesto_proyecto').update({alertado_100:true, alertado_90:true}).eq('id', cat.id);
+    } else if(pct>=90 && !cat.alertado_90){
+      await enviarAlertaPresupuesto({project, categoria:cat.categoria, presupuesto:cat.presupuesto, ejecutado, pct, umbral:90, destinatarios});
+      await supabase.from('presupuesto_proyecto').update({alertado_90:true}).eq('id', cat.id);
+    }
+  }
 }
