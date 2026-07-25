@@ -1,16 +1,16 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
 
 const ESTADO_INFO = {
   pendiente: { label: "Pendiente", color: C.warn },
-  aprobado_total: { label: "Aprobado total", color: C.green },
-  aprobado_condicional: { label: "Aprobado condicional", color: C.blueMid },
-  rechazado: { label: "Rechazado", color: C.danger },
+  devuelto: { label: "Devuelto", color: C.danger },
+  aprobado_total: { label: "Aprobado", color: C.green },
+  rechazado: { label: "Rechazado", color: C.muted },
 };
 
 const fileToBase64 = (file) => new Promise((res, rej) => {
@@ -20,19 +20,25 @@ const fileToBase64 = (file) => new Promise((res, rej) => {
   reader.readAsDataURL(file);
 });
 
-// ── FORMULARIO DE REGISTRO ────────────────────────────────────────────────────
-function NuevaCuentaForm({ usuario, onCreada }) {
-  const [project, setProject] = useState(PROJECTS[0]);
-  const [proveedor, setProveedor] = useState("");
+const puedeEditar = (cuenta, usuario) =>
+  (cuenta.estado === "pendiente" || cuenta.estado === "devuelto") &&
+  (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
+
+// ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
+function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
+  const [project, setProject] = useState(editando?.project || PROJECTS[0]);
+  const [proveedor, setProveedor] = useState(editando?.proveedor || "");
   const [proveedores, setProveedores] = useState([]);
   useEffect(() => { loadProveedores().then(setProveedores); }, []);
-  const [concepto, setConcepto] = useState(ACTIVIDADES_CATALOGO[0]);
-  const [conceptoOtro, setConceptoOtro] = useState("");
-  const [cantidad, setCantidad] = useState("");
-  const [unidad, setUnidad] = useState(UNIDADES[0]);
-  const [unidadOtro, setUnidadOtro] = useState("");
-  const [valor, setValor] = useState("");
-  const [observaciones, setObservaciones] = useState("");
+  const conceptoInicial = editando && !ACTIVIDADES_CATALOGO.includes(editando.concepto) ? "Otro" : (editando?.concepto || ACTIVIDADES_CATALOGO[0]);
+  const [concepto, setConcepto] = useState(conceptoInicial);
+  const [conceptoOtro, setConceptoOtro] = useState(conceptoInicial === "Otro" ? editando.concepto : "");
+  const [cantidad, setCantidad] = useState(editando?.cantidad ?? "");
+  const unidadInicial = editando?.unidad && !UNIDADES.includes(editando.unidad) ? "Otro" : (editando?.unidad || UNIDADES[0]);
+  const [unidad, setUnidad] = useState(unidadInicial);
+  const [unidadOtro, setUnidadOtro] = useState(unidadInicial === "Otro" ? editando.unidad : "");
+  const [valor, setValor] = useState(editando?.valor ?? "");
+  const [observaciones, setObservaciones] = useState(editando?.observaciones || "");
   const [archivo, setArchivo] = useState(null);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -66,32 +72,51 @@ function NuevaCuentaForm({ usuario, onCreada }) {
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
 
     setEnviando(true);
-    let linkSoporte = null;
+    let linkSoporte = editando?.link_soporte || null;
     if (archivo) {
       const base64 = await fileToBase64(archivo);
-      linkSoporte = await subirSoporteCuentaCobro({ project, fileName: archivo.name, base64 });
-      if (!linkSoporte) {
+      const url = await subirSoporteCuentaCobro({ project, fileName: archivo.name, base64 });
+      if (!url) {
         setError("⚠️ No se pudo subir el soporte a Drive. Intenta de nuevo.");
         setEnviando(false);
         return;
       }
+      linkSoporte = url;
     }
-    const ok = await crearCuentaCobro({
-      project, proveedor: proveedor.trim(), concepto: conceptoFinal,
-      cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
-      linkSoporte, autor: usuario.nombre, autorId: usuario.id,
-    });
+
+    let ok;
+    if (editando) {
+      ok = await actualizarCuentaCobro(editando.id, {
+        project, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), linkSoporte,
+      }, usuario.nombre, editando.estado === "devuelto");
+    } else {
+      ok = await crearCuentaCobro({
+        project, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
+        linkSoporte, autor: usuario.nombre, autorId: usuario.id,
+      });
+    }
     setEnviando(false);
-    if (!ok) { setError("⚠️ No se pudo registrar la cuenta de cobro. Intenta de nuevo."); return; }
-    reset();
-    setEnviado(true);
-    setTimeout(() => setEnviado(false), 4000);
-    onCreada();
+    if (!ok) { setError("⚠️ No se pudo guardar la cuenta de cobro. Intenta de nuevo."); return; }
+    if (editando) {
+      onGuardada();
+    } else {
+      reset();
+      setEnviado(true);
+      setTimeout(() => setEnviado(false), 4000);
+      onGuardada();
+    }
   };
 
   return (
-    <Card style={{ marginBottom: 20 }}>
-      <SectionTitle>Nueva Cuenta de Cobro</SectionTitle>
+    <Card style={{ marginBottom: 20, border: editando ? `1px solid ${C.blueMid}` : undefined }}>
+      <SectionTitle>{editando ? "Editar Cuenta de Cobro" : "Nueva Cuenta de Cobro"}</SectionTitle>
+      {editando?.estado === "devuelto" && (
+        <div style={{ background: C.danger + "12", border: `1px solid ${C.danger}`, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 13 }}>
+          🔄 Esta cuenta fue devuelta{editando.condicion ? <>: <b>{editando.condicion}</b></> : "."} Corrige lo necesario y guarda para reenviarla.
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Proyecto</label>
@@ -137,6 +162,7 @@ function NuevaCuentaForm({ usuario, onCreada }) {
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>📎 Soporte / factura (PDF o imagen, opcional)</label>
           <input type="file" accept="application/pdf,image/*" style={{ ...INP, padding: 6 }} onChange={onFileChange} />
+          {editando?.link_soporte && !archivo && <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Ya tiene un soporte adjunto — sube uno nuevo solo si quieres reemplazarlo.</div>}
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>
@@ -145,33 +171,36 @@ function NuevaCuentaForm({ usuario, onCreada }) {
       </div>
       {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {enviado && <div style={{ background: C.green + "18", border: `1px solid ${C.green}`, borderRadius: 8, padding: 10, marginBottom: 12, color: C.green, fontWeight: 600, textAlign: "center" }}>✅ Cuenta de cobro registrada — queda pendiente de aprobación</div>}
-      <button onClick={submit} disabled={enviando} style={{ width: "100%", background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 10, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer" }}>
-        {enviando ? "Registrando..." : "Registrar cuenta de cobro"}
-      </button>
+      <div style={{ display: "flex", gap: 10 }}>
+        {editando && <button onClick={onCancelarEdicion} style={{ ...BTN_SM, flex: 1, padding: 13 }}>Cancelar</button>}
+        <button onClick={submit} disabled={enviando} style={{ flex: editando ? 2 : 1, background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 10, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer" }}>
+          {enviando ? "Guardando..." : editando ? (editando.estado === "devuelto" ? "Guardar y reenviar" : "Guardar cambios") : "Registrar cuenta de cobro"}
+        </button>
+      </div>
     </Card>
   );
 }
 
 // ── MODAL DE REVISIÓN (Directivo) ─────────────────────────────────────────────
 function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
-  const [modo, setModo] = useState(null); // 'aprobado_total' | 'aprobado_condicional' | 'rechazado'
+  const [modo, setModo] = useState(null); // 'devuelto' | 'rechazado'
   const [texto, setTexto] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   const confirmar = async (estado) => {
-    if ((estado === "aprobado_condicional" || estado === "rechazado") && !texto.trim()) {
-      setError(estado === "rechazado" ? "⚠️ Escribe el motivo del rechazo." : "⚠️ Escribe la condición pendiente.");
+    if ((estado === "devuelto" || estado === "rechazado") && !texto.trim()) {
+      setError(estado === "rechazado" ? "⚠️ Escribe el motivo del rechazo." : "⚠️ Escribe qué debe corregir.");
       return;
     }
     setEnviando(true);
     const revisadoPor = cuenta.__usuario.nombre;
     const ok = await actualizarEstadoCuentaCobro(cuenta.id, estado,
-      { condicion: estado === "aprobado_condicional" ? texto.trim() : null, motivoRechazo: estado === "rechazado" ? texto.trim() : null },
+      { condicion: estado === "devuelto" ? texto.trim() : null, motivoRechazo: estado === "rechazado" ? texto.trim() : null },
       revisadoPor);
     let notifOk = true;
-    if (ok && (estado === "aprobado_total" || estado === "aprobado_condicional")) {
-      notifOk = await notificarPagoAprobado({ ...cuenta, estado, condicion: estado === "aprobado_condicional" ? texto.trim() : null });
+    if (ok && estado === "aprobado_total") {
+      notifOk = await notificarPagoAprobado({ ...cuenta, estado });
     }
     setEnviando(false);
     if (!ok) { setError("⚠️ No se pudo guardar la decisión. Intenta de nuevo."); return; }
@@ -181,7 +210,7 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
-      <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px #0003" }}>
+      <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px #0003", maxHeight: "90vh", overflowY: "auto" }}>
         <h3 style={{ color: C.blue, margin: "0 0 4px" }}>Revisar cuenta de cobro</h3>
         <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
 
@@ -194,10 +223,24 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
           {cuenta.link_soporte && <div style={{ marginTop: 6 }}><a href={cuenta.link_soporte} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>📎 Ver soporte/factura →</a></div>}
         </div>
 
+        {(cuenta.historial || []).length > 1 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 }}>Historial</div>
+            <div style={{ display: "grid", gap: 4 }}>
+              {cuenta.historial.map((h, i) => (
+                <div key={i} style={{ fontSize: 12, color: C.text, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span><b>{h.accion}</b>{h.detalle ? `: ${h.detalle}` : ""} — {h.por}</span>
+                  <span style={{ color: C.muted, whiteSpace: "nowrap" }}>{new Date(h.fecha).toLocaleDateString("es-CO")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!modo && (
           <div style={{ display: "grid", gap: 8 }}>
-            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>✅ Aprobar total</button>
-            <button onClick={() => setModo("aprobado_condicional")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>⚠️ Aprobar condicional</button>
+            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>✅ Aprobar</button>
+            <button onClick={() => setModo("devuelto")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>🔄 Devolver para corrección</button>
             <button onClick={() => setModo("rechazado")} style={{ background: C.danger, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>❌ Rechazar</button>
             <button onClick={onClose} style={{ ...BTN_SM, padding: 10 }}>Cancelar</button>
           </div>
@@ -205,8 +248,8 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
 
         {modo && (
           <div>
-            <label style={{ color: C.muted, fontSize: 12 }}>{modo === "rechazado" ? "Motivo del rechazo" : "Condición pendiente"}</label>
-            <textarea style={{ ...INP, minHeight: 70, marginBottom: 12 }} value={texto} onChange={e => setTexto(e.target.value)} placeholder={modo === "rechazado" ? "Ej: falta soporte de campo" : "Ej: falta remisión firmada"} autoFocus />
+            <label style={{ color: C.muted, fontSize: 12 }}>{modo === "rechazado" ? "Motivo del rechazo" : "¿Qué debe corregir el Ingeniero?"}</label>
+            <textarea style={{ ...INP, minHeight: 70, marginBottom: 12 }} value={texto} onChange={e => setTexto(e.target.value)} placeholder={modo === "rechazado" ? "Ej: no procede este pago" : "Ej: falta remisión firmada"} autoFocus />
             {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => { setModo(null); setError(""); }} style={{ ...BTN_SM, flex: 1, padding: 10 }}>Volver</button>
@@ -228,6 +271,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [fProyecto, setFProyecto] = useState("");
   const [fEstado, setFEstado] = useState("");
   const [revisando, setRevisando] = useState(null);
+  const [editando, setEditando] = useState(null);
   const [aviso, setAviso] = useState(null);
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
@@ -244,7 +288,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   const onResuelto = (estado, notifOk) => {
     onRefresh();
-    if ((estado === "aprobado_total" || estado === "aprobado_condicional") && !notifOk) {
+    if (estado === "aprobado_total" && !notifOk) {
       setAviso("⚠️ Se guardó la decisión, pero no se pudo notificar a contabilidad por correo. Avísales manualmente.");
     } else {
       setAviso("✅ Decisión guardada correctamente.");
@@ -252,12 +296,21 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     setTimeout(() => setAviso(null), 5000);
   };
 
+  const onGuardadaEdicion = () => {
+    setEditando(null);
+    onRefresh();
+    setAviso("✅ Cambios guardados correctamente.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
   return (
     <div>
       <h2 style={{ color: C.blue, marginBottom: 20, fontWeight: 800 }}>💳 Cuentas de Cobro</h2>
 
-      {(usuario.rol === "Ingeniero" || usuario.rol === "Directivo") && (
-        <NuevaCuentaForm usuario={usuario} onCreada={onRefresh} />
+      {editando ? (
+        <CuentaForm key={editando.id} usuario={usuario} editando={editando} onGuardada={onGuardadaEdicion} onCancelarEdicion={() => setEditando(null)} />
+      ) : (usuario.rol === "Ingeniero" || usuario.rol === "Directivo") && (
+        <CuentaForm key="nueva" usuario={usuario} onGuardada={onRefresh} />
       )}
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}
@@ -306,6 +359,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       <td style={{ padding: "9px 12px" }}>
                         <div style={{ display: "flex", gap: 6, whiteSpace: "nowrap", alignItems: "center" }}>
                           {c.link_soporte && <a href={c.link_soporte} target="_blank" rel="noreferrer" style={{ ...BTN_SM, color: C.blue, borderColor: C.blue, textDecoration: "none" }}>📎</a>}
+                          {puedeEditar(c, usuario) && (
+                            <button onClick={() => setEditando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>✏️ Editar</button>
+                          )}
                           {usuario.rol === "Directivo" && c.estado === "pendiente" && (
                             <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
                           )}

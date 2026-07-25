@@ -178,6 +178,7 @@ export async function crearCuentaCobro({project, proveedor, concepto, cantidad, 
     link_soporte: linkSoporte||null,
     estado: 'pendiente',
     autor, autor_id: autorId,
+    historial: [{accion:'Creado', por:autor, fecha:new Date().toISOString()}],
   };
   const { error } = await supabase.from('cuentas_cobro').insert(row);
   if(error){ console.error('Error creando cuenta de cobro:', error); return false; }
@@ -186,12 +187,37 @@ export async function crearCuentaCobro({project, proveedor, concepto, cantidad, 
 
 export { subirSoporteCuentaCobro };
 
+// Usada por el Directivo para aprobar/devolver/rechazar.
 export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivoRechazo}, revisadoPor){
+  const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
+  const accionLabel = estado==='aprobado_total' ? 'Aprobado' : estado==='devuelto' ? 'Devuelto' : 'Rechazado';
+  const detalle = estado==='devuelto' ? condicion : estado==='rechazado' ? motivoRechazo : null;
+  const historial = [...(actual?.historial||[]), {accion:accionLabel, detalle, por:revisadoPor, fecha:new Date().toISOString()}];
   const { error } = await supabase.from('cuentas_cobro').update({
     estado, condicion: condicion||null, motivo_rechazo: motivoRechazo||null,
-    revisado_por: revisadoPor, revisado_at: new Date().toISOString(),
+    revisado_por: revisadoPor, revisado_at: new Date().toISOString(), historial,
   }).eq('id', id);
   if(error){ console.error('Error actualizando cuenta de cobro:', error); return false; }
+  return true;
+}
+
+// Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
+// se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente").
+export async function actualizarCuentaCobro(id, {project, proveedor, concepto, cantidad, unidad, valor, observaciones, linkSoporte}, editor, estabaDevuelto){
+  const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
+  const accion = estabaDevuelto ? 'Corregido y reenviado' : 'Editado';
+  const historial = [...(actual?.historial||[]), {accion, por:editor, fecha:new Date().toISOString()}];
+  const { error } = await supabase.from('cuentas_cobro').update({
+    project, proveedor, concepto,
+    cantidad: cantidad===""?null:+cantidad,
+    unidad: unidad||null,
+    valor: +valor||0,
+    observaciones: observaciones||null,
+    link_soporte: linkSoporte||null,
+    estado: estabaDevuelto ? 'pendiente' : undefined,
+    historial,
+  }).eq('id', id);
+  if(error){ console.error('Error editando cuenta de cobro:', error); return false; }
   return true;
 }
 
