@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado } from "../lib/api.js";
+import { crearCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -24,6 +24,8 @@ const fileToBase64 = (file) => new Promise((res, rej) => {
 function NuevaCuentaForm({ usuario, onCreada }) {
   const [project, setProject] = useState(PROJECTS[0]);
   const [proveedor, setProveedor] = useState("");
+  const [proveedores, setProveedores] = useState([]);
+  useEffect(() => { loadProveedores().then(setProveedores); }, []);
   const [concepto, setConcepto] = useState(ACTIVIDADES_CATALOGO[0]);
   const [conceptoOtro, setConceptoOtro] = useState("");
   const [cantidad, setCantidad] = useState("");
@@ -99,7 +101,10 @@ function NuevaCuentaForm({ usuario, onCreada }) {
         </div>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Proveedor / Contratista</label>
-          <input style={INP} value={proveedor} onChange={e => setProveedor(e.target.value)} placeholder="Ej: Cristian Visbal Ochoa" />
+          <input style={INP} list="proveedores-list" value={proveedor} onChange={e => setProveedor(e.target.value)} placeholder="Busca o escribe uno nuevo" />
+          <datalist id="proveedores-list">
+            {proveedores.map(p => <option key={p.nombre} value={p.nombre} />)}
+          </datalist>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>

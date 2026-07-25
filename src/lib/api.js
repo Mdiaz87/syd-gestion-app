@@ -206,3 +206,9 @@ export async function notificarPagoAprobado(cuenta){
     destinatarios,
   });
 }
+
+export async function loadProveedores(){
+  const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
+  if(error){ console.error('Error cargando proveedores:', error); return []; }
+  return data || [];
+}
