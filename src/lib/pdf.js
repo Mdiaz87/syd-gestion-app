@@ -179,6 +179,40 @@ export async function enviarAlertaPresupuesto({project, categoria, presupuesto, 
   }
 }
 
+// Sube el soporte/factura de una cuenta de cobro a Drive (carpeta
+// "SYD - Cuentas de Cobro / {proyecto}") vía el mismo Apps Script que ya
+// usamos para los informes. Devuelve el link resultante o null si falla.
+export async function subirSoporteCuentaCobro({project, fileName, base64}){
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({tipoAlerta:'soporte_cobro', project, fileName, base64})
+    });
+    const resultado = await res.json();
+    if(resultado.error){ console.error("Error subiendo soporte:", resultado.error); return null; }
+    return resultado.url || null;
+  }catch(e){
+    console.error("Error subiendo soporte de cuenta de cobro:", e);
+    return null;
+  }
+}
+
+export async function enviarNotificacionPago({project, proveedor, concepto, cantidad, unidad, valor, estado, condicion, linkSoporte, destinatarios}){
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({tipoAlerta:'pago', project, proveedor, concepto, cantidad, unidad, valor, estado, condicion, linkSoporte, destinatarios})
+    });
+    const resultado = await res.json();
+    return !!resultado.ok;
+  }catch(e){
+    console.error("Error enviando notificación de pago:", e);
+    return false;
+  }
+}
+
 export function verImprimirInforme(report){
   const html = generarHTMLInforme(report);
   const w = window.open("","_blank");

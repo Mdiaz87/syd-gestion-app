@@ -1,5 +1,5 @@
 import { supabase, createScratchClient } from "../supabase.js";
-import { enviarAlertaPresupuesto } from "./pdf.js";
+import { enviarAlertaPresupuesto, enviarNotificacionPago, subirSoporteCuentaCobro } from "./pdf.js";
 
 // Dominio real de la empresa: Supabase Auth exige un dominio con DNS válido,
 // no acepta dominios inventados. Las direcciones son sintéticas (no reciben
@@ -158,4 +158,51 @@ export async function verificarAlertasPresupuesto(project, financiero, cumAnteri
       await supabase.from('presupuesto_proyecto').update({alertado_90:true}).eq('id', cat.id);
     }
   }
+}
+
+// ── CUENTAS DE COBRO (Aprobación de Pagos) ────────────────────────────────────
+export async function loadCuentasCobro(){
+  const { data, error } = await supabase.from('cuentas_cobro').select('*').order('created_at', {ascending:false});
+  if(error){ console.error('Error cargando cuentas de cobro:', error); return []; }
+  return data || [];
+}
+
+export async function crearCuentaCobro({project, proveedor, concepto, cantidad, unidad, valor, observaciones, linkSoporte, autor, autorId}){
+  const row = {
+    id: Date.now(),
+    project, proveedor, concepto,
+    cantidad: cantidad===""?null:+cantidad,
+    unidad: unidad||null,
+    valor: +valor||0,
+    observaciones: observaciones||null,
+    link_soporte: linkSoporte||null,
+    estado: 'pendiente',
+    autor, autor_id: autorId,
+  };
+  const { error } = await supabase.from('cuentas_cobro').insert(row);
+  if(error){ console.error('Error creando cuenta de cobro:', error); return false; }
+  return true;
+}
+
+export { subirSoporteCuentaCobro };
+
+export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivoRechazo}, revisadoPor){
+  const { error } = await supabase.from('cuentas_cobro').update({
+    estado, condicion: condicion||null, motivo_rechazo: motivoRechazo||null,
+    revisado_por: revisadoPor, revisado_at: new Date().toISOString(),
+  }).eq('id', id);
+  if(error){ console.error('Error actualizando cuenta de cobro:', error); return false; }
+  return true;
+}
+
+export async function notificarPagoAprobado(cuenta){
+  const { data } = await supabase.from('destinatarios').select('emails').eq('project','_contabilidad').single();
+  const destinatarios = data?.emails || [];
+  if(!destinatarios.length) return false;
+  return await enviarNotificacionPago({
+    project: cuenta.project, proveedor: cuenta.proveedor, concepto: cuenta.concepto,
+    cantidad: cuenta.cantidad, unidad: cuenta.unidad, valor: cuenta.valor,
+    estado: cuenta.estado, condicion: cuenta.condicion, linkSoporte: cuenta.link_soporte,
+    destinatarios,
+  });
 }
