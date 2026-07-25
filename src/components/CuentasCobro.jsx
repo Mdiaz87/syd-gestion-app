@@ -24,6 +24,10 @@ const puedeEditar = (cuenta, usuario) =>
   (cuenta.estado === "pendiente" || cuenta.estado === "devuelto") &&
   (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
 
+// Compatibilidad: cuentas viejas solo tienen link_soporte (string único).
+const soportesDe = (cuenta) =>
+  cuenta.soportes?.length ? cuenta.soportes : (cuenta.link_soporte ? [{ nombre: "Soporte", url: cuenta.link_soporte }] : []);
+
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   const [project, setProject] = useState(editando?.project || PROJECTS[0]);
@@ -39,28 +43,33 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   const [unidadOtro, setUnidadOtro] = useState(unidadInicial === "Otro" ? editando.unidad : "");
   const [valor, setValor] = useState(editando?.valor ?? "");
   const [observaciones, setObservaciones] = useState(editando?.observaciones || "");
-  const [archivo, setArchivo] = useState(null);
+  const [soportesExistentes, setSoportesExistentes] = useState(soportesDe(editando || {}));
+  const [archivosNuevos, setArchivosNuevos] = useState([]);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
 
   const onFileChange = (e) => {
-    const f = e.target.files[0];
+    const files = Array.from(e.target.files || []);
     setError("");
-    if (!f) { setArchivo(null); return; }
-    if (f.size > TAMANO_MAXIMO_SOPORTE) {
-      setError("⚠️ El archivo pesa más de 15MB. Comprime el PDF o la imagen antes de subirla.");
-      e.target.value = "";
-      setArchivo(null);
-      return;
+    const validos = [];
+    for (const f of files) {
+      if (f.size > TAMANO_MAXIMO_SOPORTE) {
+        setError(`⚠️ "${f.name}" pesa más de 15MB. Comprime el archivo antes de subirlo.`);
+        continue;
+      }
+      validos.push(f);
     }
-    setArchivo(f);
+    setArchivosNuevos(prev => [...prev, ...validos]);
+    e.target.value = "";
   };
+  const quitarArchivoNuevo = (i) => setArchivosNuevos(prev => prev.filter((_, idx) => idx !== i));
+  const quitarSoporteExistente = (i) => setSoportesExistentes(prev => prev.filter((_, idx) => idx !== i));
 
   const reset = () => {
     setProveedor(""); setConcepto(ACTIVIDADES_CATALOGO[0]); setConceptoOtro("");
     setCantidad(""); setUnidad(UNIDADES[0]); setUnidadOtro("");
-    setValor(""); setObservaciones(""); setArchivo(null);
+    setValor(""); setObservaciones(""); setArchivosNuevos([]); setSoportesExistentes([]);
   };
 
   const submit = async () => {
@@ -72,29 +81,30 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
 
     setEnviando(true);
-    let linkSoporte = editando?.link_soporte || null;
-    if (archivo) {
-      const base64 = await fileToBase64(archivo);
-      const url = await subirSoporteCuentaCobro({ project, fileName: archivo.name, base64 });
+    const nuevosSubidos = [];
+    for (const f of archivosNuevos) {
+      const base64 = await fileToBase64(f);
+      const url = await subirSoporteCuentaCobro({ project, fileName: f.name, base64 });
       if (!url) {
-        setError("⚠️ No se pudo subir el soporte a Drive. Intenta de nuevo.");
+        setError(`⚠️ No se pudo subir "${f.name}" a Drive. Intenta de nuevo.`);
         setEnviando(false);
         return;
       }
-      linkSoporte = url;
+      nuevosSubidos.push({ nombre: f.name, url });
     }
+    const soportes = [...soportesExistentes, ...nuevosSubidos];
 
     let ok;
     if (editando) {
       ok = await actualizarCuentaCobro(editando.id, {
         project, proveedor: proveedor.trim(), concepto: conceptoFinal,
-        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), linkSoporte,
+        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes,
       }, usuario.nombre, editando.estado === "devuelto");
     } else {
       ok = await crearCuentaCobro({
         project, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
-        linkSoporte, autor: usuario.nombre, autorId: usuario.id,
+        soportes, autor: usuario.nombre, autorId: usuario.id,
       });
     }
     setEnviando(false);
@@ -160,9 +170,24 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
           <CurrencyInput style={INP} value={valor} onChange={setValor} />
         </div>
         <div>
-          <label style={{ color: C.muted, fontSize: 12 }}>📎 Soporte / factura (PDF o imagen, opcional)</label>
-          <input type="file" accept="application/pdf,image/*" style={{ ...INP, padding: 6 }} onChange={onFileChange} />
-          {editando?.link_soporte && !archivo && <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Ya tiene un soporte adjunto — sube uno nuevo solo si quieres reemplazarlo.</div>}
+          <label style={{ color: C.muted, fontSize: 12 }}>📎 Soporte / factura (PDF o imagen, puedes subir varios)</label>
+          <input type="file" accept="application/pdf,image/*" multiple style={{ ...INP, padding: 6 }} onChange={onFileChange} />
+          {(soportesExistentes.length > 0 || archivosNuevos.length > 0) && (
+            <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+              {soportesExistentes.map((s, i) => (
+                <div key={`ex-${i}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, background: C.bgCard2, borderRadius: 6, padding: "4px 8px" }}>
+                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color: C.blue, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {s.nombre || "Soporte"}</a>
+                  <button type="button" onClick={() => quitarSoporteExistente(i)} style={{ border: "none", background: "none", color: C.danger, cursor: "pointer", fontSize: 12, flexShrink: 0 }}>Quitar</button>
+                </div>
+              ))}
+              {archivosNuevos.map((f, i) => (
+                <div key={`new-${i}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, background: C.bgCard2, borderRadius: 6, padding: "4px 8px" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📄 {f.name} <i style={{ color: C.muted }}>(nuevo)</i></span>
+                  <button type="button" onClick={() => quitarArchivoNuevo(i)} style={{ border: "none", background: "none", color: C.danger, cursor: "pointer", fontSize: 12, flexShrink: 0 }}>Quitar</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>
@@ -220,7 +245,13 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
           <div><b>Valor:</b> {fmt(cuenta.valor)}</div>
           {cuenta.observaciones && <div><b>Observaciones:</b> {cuenta.observaciones}</div>}
           <div><b>Registrado por:</b> {cuenta.autor}</div>
-          {cuenta.link_soporte && <div style={{ marginTop: 6 }}><a href={cuenta.link_soporte} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>📎 Ver soporte/factura →</a></div>}
+          {soportesDe(cuenta).length > 0 && (
+            <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
+              {soportesDe(cuenta).map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>📎 {s.nombre || `Soporte ${i + 1}`} →</a>
+              ))}
+            </div>
+          )}
         </div>
 
         {(cuenta.historial || []).length > 1 && (
@@ -358,7 +389,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         <div style={{ display: "flex", gap: 6, whiteSpace: "nowrap", alignItems: "center" }}>
-                          {c.link_soporte && <a href={c.link_soporte} target="_blank" rel="noreferrer" style={{ ...BTN_SM, color: C.blue, borderColor: C.blue, textDecoration: "none" }}>📎</a>}
+                          {soportesDe(c).map((s, i) => (
+                            <a key={i} href={s.url} target="_blank" rel="noreferrer" title={s.nombre} style={{ ...BTN_SM, color: C.blue, borderColor: C.blue, textDecoration: "none" }}>📎{soportesDe(c).length > 1 ? i + 1 : ""}</a>
+                          ))}
                           {puedeEditar(c, usuario) && (
                             <button onClick={() => setEditando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>✏️ Editar</button>
                           )}

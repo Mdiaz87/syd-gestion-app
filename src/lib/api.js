@@ -167,7 +167,7 @@ export async function loadCuentasCobro(){
   return data || [];
 }
 
-export async function crearCuentaCobro({project, proveedor, concepto, cantidad, unidad, valor, observaciones, linkSoporte, autor, autorId}){
+export async function crearCuentaCobro({project, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, autor, autorId}){
   const row = {
     id: Date.now(),
     project, proveedor, concepto,
@@ -175,7 +175,7 @@ export async function crearCuentaCobro({project, proveedor, concepto, cantidad, 
     unidad: unidad||null,
     valor: +valor||0,
     observaciones: observaciones||null,
-    link_soporte: linkSoporte||null,
+    soportes: soportes||[],
     estado: 'pendiente',
     autor, autor_id: autorId,
     historial: [{accion:'Creado', por:autor, fecha:new Date().toISOString()}],
@@ -203,7 +203,7 @@ export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivo
 
 // Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
 // se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente").
-export async function actualizarCuentaCobro(id, {project, proveedor, concepto, cantidad, unidad, valor, observaciones, linkSoporte}, editor, estabaDevuelto){
+export async function actualizarCuentaCobro(id, {project, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes}, editor, estabaDevuelto){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
   const accion = estabaDevuelto ? 'Corregido y reenviado' : 'Editado';
   const historial = [...(actual?.historial||[]), {accion, por:editor, fecha:new Date().toISOString()}];
@@ -213,7 +213,7 @@ export async function actualizarCuentaCobro(id, {project, proveedor, concepto, c
     unidad: unidad||null,
     valor: +valor||0,
     observaciones: observaciones||null,
-    link_soporte: linkSoporte||null,
+    soportes: soportes||[],
     estado: estabaDevuelto ? 'pendiente' : undefined,
     historial,
   }).eq('id', id);
@@ -225,10 +225,12 @@ export async function notificarPagoAprobado(cuenta){
   const { data } = await supabase.from('destinatarios').select('emails').eq('project','_contabilidad').single();
   const destinatarios = data?.emails || [];
   if(!destinatarios.length) return false;
+  const soportes = cuenta.soportes?.length ? cuenta.soportes : (cuenta.link_soporte ? [{nombre:'Soporte', url:cuenta.link_soporte}] : []);
+  const linkSoporte = soportes.map((s,i)=> soportes.length>1 ? `${i+1}. ${s.nombre}: ${s.url}` : s.url).join('\n');
   return await enviarNotificacionPago({
     project: cuenta.project, proveedor: cuenta.proveedor, concepto: cuenta.concepto,
     cantidad: cuenta.cantidad, unidad: cuenta.unidad, valor: cuenta.valor,
-    estado: cuenta.estado, condicion: cuenta.condicion, linkSoporte: cuenta.link_soporte,
+    estado: cuenta.estado, condicion: cuenta.condicion, linkSoporte,
     destinatarios,
   });
 }
