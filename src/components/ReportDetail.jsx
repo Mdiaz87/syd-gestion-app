@@ -35,6 +35,10 @@ export function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.muted,fontSize:13}}>Recursos Ejecutados</span><b style={{color:C.blueMid}}>{avanceRecursos}%</b></div>
           <Bar value={avanceRecursos} color={C.blueMid}/>
         </div>}
+        {(report.avancePlaneado!==null&&report.avancePlaneado!==undefined)&&<div style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:C.muted,fontSize:13}}>Avance Planeado</span><b style={{color:C.warn}}>{report.avancePlaneado}%</b></div>
+          <Bar value={report.avancePlaneado} color={C.warn}/>
+        </div>}
         <div style={{background:C.bgCard2,borderRadius:8,padding:10,fontSize:13,border:`1px solid ${C.border}`}}>
           <div style={{display:"flex",justifyContent:"space-between"}}>
             <span style={{color:C.muted}}>Eficiencia de Costo</span>

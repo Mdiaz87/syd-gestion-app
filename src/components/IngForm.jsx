@@ -27,6 +27,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const mes=`${mesNombre} ${anio}`;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [avRec,setAvRec]=useState(initial?.avanceRecursos||0);
+  const [avPlan,setAvPlan]=useState(initial?.avancePlaneado??"");
   const [frentes,setFrentes]=useState(()=>initial?.frentes||initFrentes(initial?.project||PROJECTS[0]));
   const [financiero,setFinanciero]=useState(initial?.financiero||emptyFinanciero());
   const [tramites,setTramites]=useState(initial?.tramites||emptyTramite());
@@ -98,6 +99,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
     const baseReport={
       id: initial?.id || Date.now(),
       type,role:"Ingeniero",project,author,mes,avanceObra:+avObra,avanceRecursos:+avRec,
+      avancePlaneado:avPlan===""?null:+avPlan,
       date:new Date().toISOString().slice(0,10),frentes,financiero,tramites,resumen,totalGastos,
       activities:frentes.map(f=>f.nombre).join(", "),
       novelties:frentes.map(f=>f.descripcion).filter(Boolean).slice(0,1).join(" ")||"Sin novedades",
@@ -147,7 +149,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
             </select>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <div>
               <label style={{color:C.muted,fontSize:12}}>Mes</label>
@@ -173,7 +175,15 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
               setAvRec(v===""?"":Math.max(0,Math.min(100,+v)));
             }}/>
           </div>
+          <div>
+            <label style={{color:C.muted,fontSize:12}}>% Avance Planeado <span style={{color:C.muted,fontWeight:400}}>(opcional)</span></label>
+            <input type="number" min={0} max={100} style={INP} placeholder="Según cronograma" value={avPlan} onChange={e=>{
+              const v=e.target.value;
+              setAvPlan(v===""?"":Math.max(0,Math.min(100,+v)));
+            }}/>
+          </div>
         </div>
+        <div style={{color:C.muted,fontSize:11,marginTop:6}}>El avance planeado se usa para comparar contra el avance real en la Curva S del Dashboard. Déjalo vacío si aún no tienes un cronograma definido para este proyecto.</div>
       </Card>
 
       <SectionTitle color={C.blue}>Frentes de Trabajo</SectionTitle>

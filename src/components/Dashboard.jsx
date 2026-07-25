@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip as RcTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip as RcTooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP } from "../lib/constants.js";
 import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
 import { Badge, Bar } from "./ui.jsx";
@@ -280,11 +280,17 @@ export function Dashboard({reports,presupuestos}){
           const byMes={};
           reports.filter(r=>r.role==="Ingeniero"&&r.project===mesTabProj&&r.date).forEach(r=>{
             const m=r.date.slice(0,7);
-            if(!byMes[m]) byMes[m]=[];
-            byMes[m].push(+r.avanceObra||0);
+            if(!byMes[m]) byMes[m]={real:[],plan:[]};
+            byMes[m].real.push(+r.avanceObra||0);
+            if(r.avancePlaneado!==null&&r.avancePlaneado!==undefined) byMes[m].plan.push(+r.avancePlaneado);
           });
-          return Object.entries(byMes).map(([m,vals])=>({mes:m,mesLabel:fmtMes(m),avance:Math.max(...vals)})).sort((a,b)=>a.mes.localeCompare(b.mes));
+          return Object.entries(byMes).map(([m,{real,plan}])=>({
+            mes:m,mesLabel:fmtMes(m),
+            avance:Math.max(...real),
+            planeado:plan.length?Math.max(...plan):null,
+          })).sort((a,b)=>a.mes.localeCompare(b.mes));
         })();
+        const tienePlan=curvaS.some(d=>d.planeado!==null);
         return (
           <div style={{marginTop:32}}>
             <h3 style={{color:C.blue,fontWeight:800,marginBottom:12,fontSize:16}}>📅 Seguimiento Mensual de Ejecución</h3>
@@ -296,8 +302,9 @@ export function Dashboard({reports,presupuestos}){
             {curvaS.length>1&&(
               <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:24}}>
                 <div style={{color:C.blue,fontWeight:700,fontSize:13,marginBottom:12}}>📈 Curva S — Avance de Obra Acumulado ({mesTabProj})</div>
+                {!tienePlan&&<div style={{color:C.muted,fontSize:11,marginBottom:8}}>Solo avance real — ningún informe de este proyecto tiene avance planeado cargado todavía.</div>}
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={curvaS} margin={{top:5,right:10,left:-10,bottom:0}}>
+                  <ComposedChart data={curvaS} margin={{top:5,right:10,left:-10,bottom:0}}>
                     <defs>
                       <linearGradient id="curvaSFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={C.blue} stopOpacity={0.35}/>
@@ -307,9 +314,11 @@ export function Dashboard({reports,presupuestos}){
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                     <XAxis dataKey="mesLabel" tick={{fontSize:11,fill:C.muted}}/>
                     <YAxis domain={[0,100]} tick={{fontSize:11,fill:C.muted}} unit="%"/>
-                    <RcTooltip formatter={v=>[`${v}%`,"Avance acumulado"]}/>
-                    <Area type="monotone" dataKey="avance" stroke={C.blue} strokeWidth={2.5} fill="url(#curvaSFill)" dot={{r:3,fill:C.blue}}/>
-                  </AreaChart>
+                    <RcTooltip formatter={(v,n)=>[v===null||v===undefined?"—":`${v}%`,n==="avance"?"Real":"Planeado"]}/>
+                    {tienePlan&&<Legend wrapperStyle={{fontSize:11}} formatter={n=>n==="avance"?"Real":"Planeado"}/>}
+                    <Area type="monotone" dataKey="avance" stroke={C.blue} strokeWidth={2.5} fill="url(#curvaSFill)" dot={{r:3,fill:C.blue}} connectNulls/>
+                    {tienePlan&&<Line type="monotone" dataKey="planeado" stroke={C.warn} strokeWidth={2} strokeDasharray="5 4" dot={{r:3,fill:C.warn}} connectNulls/>}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
