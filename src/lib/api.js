@@ -54,13 +54,25 @@ export async function loadUsuarios(){
   if(error){ console.error('Error cargando usuarios:', error); return []; }
   return data || [];
 }
+// Antes de intentar el login se consulta el bloqueo por fuerza bruta
+// (RPC server-side, no depende de nada guardado en el navegador — ver
+// [[project_syd]] para el diseño). Si está bloqueado, ni siquiera se
+// intenta la contraseña, así nunca se revela si el PIN es correcto.
 export async function login(profile, pin){
+  const { data: chk } = await supabase.rpc('intentos_restantes', { p_profile_id: profile.id });
+  if(chk?.bloqueado){
+    return { bloqueado: true, segundosRestantes: chk.segundos_restantes };
+  }
   const key = profile.legacy_id || profile.id;
   const { data, error } = await supabase.auth.signInWithPassword({
     email: profile.email,
     password: passwordFor(key, pin),
   });
-  if(error){ console.error('Error verificando código:', error); return null; }
+  if(error){
+    console.error('Error verificando código:', error);
+    await supabase.rpc('registrar_intento_fallido', { p_profile_id: profile.id });
+    return null;
+  }
   const { id, nombre, rol, activo, es_super_admin } = profile;
   return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin };
 }

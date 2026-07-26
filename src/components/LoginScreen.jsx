@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, INP } from "../lib/constants.js";
 import { login } from "../lib/api.js";
 import { SydLogo } from "./ui.jsx";
+
+const formatoEspera = (segs) => {
+  const m = Math.floor(segs/60), s = segs%60;
+  return m>0 ? `${m} min ${s.toString().padStart(2,"0")} s` : `${s} s`;
+};
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 export function LoginScreen({usuarios, onLogin}){
@@ -14,13 +19,22 @@ export function LoginScreen({usuarios, onLogin}){
   const [pin,setPin]=useState("");
   const [error,setError]=useState(false);
   const [verificando,setVerificando]=useState(false);
+  const [bloqueoSegs,setBloqueoSegs]=useState(0);
+
+  useEffect(()=>{
+    if(bloqueoSegs<=0) return;
+    const t = setInterval(()=>setBloqueoSegs(s=>Math.max(0,s-1)), 1000);
+    return ()=>clearInterval(t);
+  },[bloqueoSegs>0]);
+
   const check=async()=>{
     const profile=activos.find(u=>String(u.id)===selId);
     if(!profile) return;
     setVerificando(true);
     const u=await login(profile, pin);
     setVerificando(false);
-    if(u){ onLogin(u); }
+    if(u?.bloqueado){ setBloqueoSegs(u.segundosRestantes); setPin(""); }
+    else if(u){ onLogin(u); }
     else{ setError(true); setPin(""); }
   };
 
@@ -40,22 +54,23 @@ export function LoginScreen({usuarios, onLogin}){
         <>
           <div style={{marginBottom:14}}>
             <label style={{color:C.muted,fontSize:12,display:"block",marginBottom:6}}>¿Quién eres?</label>
-            <select style={{...INP,fontSize:14}} value={selId} onChange={e=>{setSelId(e.target.value);setError(false);setPin("");}}>
+            <select style={{...INP,fontSize:14}} value={selId} onChange={e=>{setSelId(e.target.value);setError(false);setPin("");setBloqueoSegs(0);}}>
               {sorted.map(u=><option key={u.id} value={String(u.id)}>{label(u)}</option>)}
             </select>
           </div>
           <div style={{marginBottom:error?8:20}}>
             <label style={{color:C.muted,fontSize:12,display:"block",marginBottom:6}}>Código personal (4 dígitos)</label>
-            <input type="password" inputMode="numeric" maxLength={4} autoFocus
-              style={{...INP,textAlign:"center",fontSize:22,letterSpacing:6}}
+            <input type="password" inputMode="numeric" maxLength={4} autoFocus disabled={bloqueoSegs>0}
+              style={{...INP,textAlign:"center",fontSize:22,letterSpacing:6,opacity:bloqueoSegs>0?0.6:1}}
               placeholder="••••" value={pin}
               onChange={e=>{setPin(e.target.value.replace(/[^0-9]/g,"").slice(0,4));setError(false);}}
-              onKeyDown={e=>e.key==="Enter"&&pin.length===4&&!verificando&&check()}/>
+              onKeyDown={e=>e.key==="Enter"&&pin.length===4&&!verificando&&bloqueoSegs===0&&check()}/>
           </div>
           {error&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>Código incorrecto. Intenta de nuevo.</div>}
-          <button onClick={check} disabled={pin.length!==4||verificando}
-            style={{background:pin.length===4&&!verificando?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4&&!verificando?"pointer":"not-allowed",width:"100%"}}>
-            {verificando?"Verificando...":"Entrar"}
+          {bloqueoSegs>0&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>🔒 Demasiados intentos fallidos. Intenta de nuevo en {formatoEspera(bloqueoSegs)}.</div>}
+          <button onClick={check} disabled={pin.length!==4||verificando||bloqueoSegs>0}
+            style={{background:pin.length===4&&!verificando&&bloqueoSegs===0?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4&&!verificando&&bloqueoSegs===0?"pointer":"not-allowed",width:"100%"}}>
+            {verificando?"Verificando...":bloqueoSegs>0?"Bloqueado temporalmente":"Entrar"}
           </button>
         </>
       )}
