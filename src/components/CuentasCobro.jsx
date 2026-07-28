@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -223,13 +223,14 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
     const ok = await actualizarEstadoCuentaCobro(cuenta.id, estado,
       { condicion: estado === "devuelto" ? texto.trim() : null, motivoRechazo: estado === "rechazado" ? texto.trim() : null },
       revisadoPor);
-    let notifOk = true;
+    let notifOk = true, legalizacionOk = true;
     if (ok && estado === "aprobado_total") {
       notifOk = await notificarPagoAprobado({ ...cuenta, estado });
+      legalizacionOk = await legalizarPago(cuenta.id);
     }
     setEnviando(false);
     if (!ok) { setError("⚠️ No se pudo guardar la decisión. Intenta de nuevo."); return; }
-    onResuelto(estado, notifOk);
+    onResuelto(estado, notifOk, legalizacionOk);
     onClose();
   };
 
@@ -317,13 +318,23 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     });
   }, [cuentas, search, fProyecto, fEstado]);
 
-  const onResuelto = (estado, notifOk) => {
+  const onResuelto = (estado, notifOk, legalizacionOk) => {
     onRefresh();
     if (estado === "aprobado_total" && !notifOk) {
       setAviso("⚠️ Se guardó la decisión, pero no se pudo notificar a contabilidad por correo. Avísales manualmente.");
+    } else if (estado === "aprobado_total" && !legalizacionOk) {
+      setAviso("⚠️ Se aprobó, pero no se pudo enviar a la app de legalización. Usa el botón 🔁 en la tabla para reintentar.");
     } else {
       setAviso("✅ Decisión guardada correctamente.");
     }
+    setTimeout(() => setAviso(null), 5000);
+  };
+
+  const reintentarLegalizacion = async (id) => {
+    setAviso("Reintentando...");
+    const ok = await legalizarPago(id);
+    onRefresh();
+    setAviso(ok ? "✅ Enviado a legalización correctamente." : "⚠️ Sigue fallando el envío a legalización.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -397,6 +408,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           )}
                           {usuario.rol === "Directivo" && c.estado === "pendiente" && (
                             <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
+                          )}
+                          {usuario.rol === "Directivo" && c.estado === "aprobado_total" && c.legalizacion_estado === "error" && (
+                            <button onClick={() => reintentarLegalizacion(c.id)} title={c.legalizacion_error || "Falló el envío a legalización"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Legalización</button>
                           )}
                         </div>
                       </td>

@@ -247,6 +247,17 @@ export async function notificarPagoAprobado(cuenta){
   });
 }
 
+// Al aprobar totalmente una cuenta de cobro, empuja el registro a la app
+// administrativa de contabilidad (Edge Function `legalizar-pago`, que a su
+// vez llama al webhook de esa app — la llave nunca sale del servidor). Si
+// falla, la aprobación en SYD ya quedó guardada de todos modos; solo marca
+// legalizacion_estado='error' para poder reintentar con este mismo llamado.
+export async function legalizarPago(cuentaId){
+  const { data, error } = await supabase.functions.invoke('legalizar-pago', { body: { cuentaId } });
+  if(error){ console.error('Error invocando legalizar-pago:', error); return false; }
+  return !!data?.ok;
+}
+
 export async function loadProveedores(){
   const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
   if(error){ console.error('Error cargando proveedores:', error); return []; }
