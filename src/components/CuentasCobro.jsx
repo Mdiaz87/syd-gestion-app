@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, enviarFacturaLegalizacion, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -297,6 +297,51 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
   );
 }
 
+// ── MODAL DE FACTURA DE LEGALIZACIÓN (posterior al pago) ──────────────────────
+function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
+  const [archivo, setArchivo] = useState(null);
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (!archivo) { setError("⚠️ Selecciona el archivo de la factura."); return; }
+    if (archivo.size > TAMANO_MAXIMO_SOPORTE) { setError("⚠️ El archivo pesa más de 15MB. Comprime antes de subirlo."); return; }
+    setEnviando(true);
+    const base64 = await fileToBase64(archivo);
+    const url = await subirSoporteCuentaCobro({ project: cuenta.project, fileName: archivo.name, base64 });
+    if (!url) { setError("⚠️ No se pudo subir el archivo a Drive. Intenta de nuevo."); setEnviando(false); return; }
+    const ok = await enviarFacturaLegalizacion(cuenta.id, url);
+    setEnviando(false);
+    if (!ok) { setError("⚠️ Se subió a Drive, pero no se pudo enviar a la app de legalización. Puedes reintentar desde la tabla."); return; }
+    onEnviada();
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
+      <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", boxShadow: "0 10px 40px #0003" }}>
+        <h3 style={{ color: C.blue, margin: "0 0 4px" }}>Factura de legalización</h3>
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
+        {cuenta.factura_legalizacion_url && (
+          <div style={{ background: C.bgCard2, borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 12 }}>
+            Ya hay una factura cargada: <a href={cuenta.factura_legalizacion_url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>verla →</a>. Sube otra solo si necesitas reemplazarla.
+          </div>
+        )}
+        <label style={{ color: C.muted, fontSize: 12 }}>Factura definitiva (PDF o imagen)</label>
+        <input type="file" accept="application/pdf,image/*" style={{ ...INP, padding: 6, marginTop: 6, marginBottom: 12 }} onChange={e => setArchivo(e.target.files[0] || null)} />
+        {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{ ...BTN_SM, flex: 1, padding: 11 }}>Cancelar</button>
+          <button onClick={submit} disabled={enviando} style={{ background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 8, padding: 11, flex: 2, cursor: enviando ? "default" : "pointer" }}>
+            {enviando ? "Enviando..." : "Enviar factura"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MÓDULO PRINCIPAL ───────────────────────────────────────────────────────────
 export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [search, setSearch] = useState("");
@@ -304,6 +349,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [fEstado, setFEstado] = useState("");
   const [revisando, setRevisando] = useState(null);
   const [editando, setEditando] = useState(null);
+  const [facturando, setFacturando] = useState(null);
   const [aviso, setAviso] = useState(null);
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
@@ -342,6 +388,21 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     setEditando(null);
     onRefresh();
     setAviso("✅ Cambios guardados correctamente.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
+  const onFacturaEnviada = () => {
+    setFacturando(null);
+    onRefresh();
+    setAviso("✅ Factura de legalización enviada correctamente.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
+  const reintentarFacturaLegalizacion = async (c) => {
+    setAviso("Reintentando...");
+    const ok = await enviarFacturaLegalizacion(c.id, c.factura_legalizacion_url);
+    onRefresh();
+    setAviso(ok ? "✅ Factura enviada a legalización correctamente." : "⚠️ Sigue fallando el envío de la factura.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -412,6 +473,14 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           {usuario.rol === "Directivo" && c.estado === "aprobado_total" && c.legalizacion_estado === "error" && (
                             <button onClick={() => reintentarLegalizacion(c.id)} title={c.legalizacion_error || "Falló el envío a legalización"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Legalización</button>
                           )}
+                          {c.estado === "aprobado_total" && (usuario.rol === "Directivo" || c.autor_id === usuario.id) && (
+                            <button onClick={() => setFacturando(c)} title={c.factura_legalizacion_url ? "Ya tiene factura — click para reemplazarla" : "Adjuntar factura de legalización"} style={{ ...BTN_SM, color: c.factura_legalizacion_url ? C.green : C.blueMid, borderColor: c.factura_legalizacion_url ? C.green : C.blueMid }}>
+                              {c.factura_legalizacion_url ? "📄✅" : "📄 Factura"}
+                            </button>
+                          )}
+                          {usuario.rol === "Directivo" && c.factura_legalizacion_estado === "error" && (
+                            <button onClick={() => reintentarFacturaLegalizacion(c)} title={c.factura_legalizacion_error || "Falló el envío de la factura"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Factura</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -428,6 +497,13 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
           cuenta={{ ...revisando, __usuario: usuario }}
           onClose={() => setRevisando(null)}
           onResuelto={onResuelto}
+        />
+      )}
+      {facturando && (
+        <FacturaLegalizacionModal
+          cuenta={facturando}
+          onClose={() => setFacturando(null)}
+          onEnviada={onFacturaEnviada}
         />
       )}
     </div>

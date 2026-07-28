@@ -258,6 +258,15 @@ export async function legalizarPago(cuentaId){
   return !!data?.ok;
 }
 
+// Sube la factura definitiva de legalización (llega DESPUÉS del pago, la
+// entrega el proveedor — distinta del soporte inicial) y la asocia al
+// registro correcto en la app de contabilidad vía referenciaExterna.
+export async function enviarFacturaLegalizacion(cuentaId, facturaUrl){
+  const { data, error } = await supabase.functions.invoke('enviar-factura-legalizacion', { body: { cuentaId, facturaUrl } });
+  if(error){ console.error('Error invocando enviar-factura-legalizacion:', error); return false; }
+  return !!data?.ok;
+}
+
 export async function loadProveedores(){
   const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
   if(error){ console.error('Error cargando proveedores:', error); return []; }
