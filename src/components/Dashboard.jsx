@@ -1,10 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip as RcTooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP } from "../lib/constants.js";
+import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, MESES } from "../lib/constants.js";
 import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
 import { Badge, Bar } from "./ui.jsx";
-
-const DIAS_ALERTA_INGENIERO = 30;
 
 export function Dashboard({reports,presupuestos}){
   const byProj={};
@@ -13,16 +11,35 @@ export function Dashboard({reports,presupuestos}){
   const recordatorios=useMemo(()=>{
     const semanaActual=getMondayStr();
     const hoy=new Date();
-    const diasDesde=fecha=>fecha?Math.floor((hoy-new Date(fecha))/86400000):null;
+    // El informe mensual de Ingeniero es del mes ANTERIOR y se carga dentro
+    // de los primeros 5 días del mes siguiente (ej. el de enero se sube
+    // entre el 1 y el 5 de febrero). Mientras estemos dentro de esos 5 días
+    // de gracia, todavía no se considera atrasado el mes recién cerrado —
+    // el que ya debería estar cargado es el anterior a ese.
+    const mesesAtras = hoy.getDate()>5 ? 1 : 2;
+    const fechaObjetivo = new Date(hoy.getFullYear(), hoy.getMonth()-mesesAtras, 1);
+    const mesObjetivo = `${MESES[fechaObjetivo.getMonth()]} ${fechaObjetivo.getFullYear()}`;
+    const nombreObjetivo = MESES[fechaObjetivo.getMonth()].toLowerCase();
+    const anioObjetivo = fechaObjetivo.getFullYear();
+    // Comparación tolerante: hay informes viejos guardados como "JUNIO 2026"
+    // (mayúsculas) o incluso "JUNIO" sin año — se acepta el nombre del mes
+    // sin importar mayúsculas, y si no trae año se asume que coincide (dato
+    // legado) en vez de generar una alerta falsa.
+    const coincideMes = (mes) => {
+      if(!mes) return false;
+      const partes = mes.trim().toLowerCase().split(/\s+/);
+      if(partes[0]!==nombreObjetivo) return false;
+      const anioTexto = parseInt(partes[1], 10);
+      return Number.isFinite(anioTexto) ? anioTexto===anioObjetivo : true;
+    };
     return PROJECTS.map(proj=>{
       const coordEnviado=reports.some(r=>r.role==="Coordinador"&&r.project===proj&&r.semana===semanaActual&&r.estado==="enviado");
-      const ultimoIng=reports.filter(r=>r.role==="Ingeniero"&&r.project===proj&&r.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
-      const diasIng=diasDesde(ultimoIng?.date);
+      const ingEnviado=reports.some(r=>r.role==="Ingeniero"&&r.project===proj&&r.type==="mensual"&&coincideMes(r.mes));
       return {
         proj,
         coordPendiente:!coordEnviado,
-        ingAtrasado: diasIng===null||diasIng>DIAS_ALERTA_INGENIERO,
-        diasIng,
+        ingAtrasado:!ingEnviado,
+        mesObjetivo,
       };
     }).filter(r=>r.coordPendiente||r.ingAtrasado);
   },[reports]);
@@ -109,7 +126,7 @@ export function Dashboard({reports,presupuestos}){
                 <span style={{color:C.text,fontWeight:600}}>{r.proj}</span>
                 <span style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                   {r.coordPendiente&&<span style={{color:C.warn}}>⚠️ Sin informe semanal de Coordinador esta semana</span>}
-                  {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: {r.diasIng===null?"nunca ha enviado un informe":`sin informe hace ${r.diasIng} días`}</span>}
+                  {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: no ha enviado el informe de {r.mesObjetivo}</span>}
                 </span>
               </div>
             ))}
