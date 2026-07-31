@@ -1,14 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, enviarFacturaLegalizacion, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
 
 const ESTADO_INFO = {
-  pendiente: { label: "Pendiente", color: C.warn },
+  pendiente_contable: { label: "Pendiente de revisión contable", color: C.warn },
   devuelto: { label: "Devuelto", color: C.danger },
+  aprobado_contable: { label: "Aprobado por Contabilidad", color: C.blueMid },
   aprobado_total: { label: "Aprobado", color: C.green },
   rechazado: { label: "Rechazado", color: C.muted },
 };
@@ -21,7 +22,7 @@ const fileToBase64 = (file) => new Promise((res, rej) => {
 });
 
 const puedeEditar = (cuenta, usuario) =>
-  (cuenta.estado === "pendiente" || cuenta.estado === "devuelto") &&
+  (cuenta.estado === "pendiente_contable" || cuenta.estado === "devuelto") &&
   (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
 
 // Compatibilidad: cuentas viejas solo tienen link_soporte (string único).
@@ -94,21 +95,27 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
     }
     const soportes = [...soportesExistentes, ...nuevosSubidos];
 
-    let ok;
+    let ok, cuentaId;
     if (editando) {
       ok = await actualizarCuentaCobro(editando.id, {
         project, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes,
       }, usuario.nombre, editando.estado === "devuelto");
+      cuentaId = editando.id;
     } else {
-      ok = await crearCuentaCobro({
+      cuentaId = await crearCuentaCobro({
         project, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
         soportes, autor: usuario.nombre, autorId: usuario.id,
       });
+      ok = !!cuentaId;
     }
     setEnviando(false);
     if (!ok) { setError("⚠️ No se pudo guardar la cuenta de cobro. Intenta de nuevo."); return; }
+    // La cuenta queda "pendiente_contable" en cualquiera de los dos casos
+    // (nueva, o editada/reenviada) — se avisa a la app de contabilidad sin
+    // bloquear la interfaz; si falla, queda marcada para reintentar.
+    enviarRevisionContable(cuentaId);
     if (editando) {
       onGuardada();
     } else {
@@ -384,6 +391,14 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     setTimeout(() => setAviso(null), 5000);
   };
 
+  const reintentarRevisionContable = async (id) => {
+    setAviso("Reintentando...");
+    const ok = await enviarRevisionContable(id);
+    onRefresh();
+    setAviso(ok ? "✅ Enviado a revisión contable correctamente." : "⚠️ Sigue fallando el envío a revisión contable.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
   const onGuardadaEdicion = () => {
     setEditando(null);
     onRefresh();
@@ -449,7 +464,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                   <tr><td colSpan={6} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
                 {filtradas.map(c => {
-                  const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente;
+                  const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable;
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>{c.project}</td>
@@ -467,8 +482,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           {puedeEditar(c, usuario) && (
                             <button onClick={() => setEditando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>✏️ Editar</button>
                           )}
-                          {usuario.rol === "Directivo" && c.estado === "pendiente" && (
+                          {usuario.rol === "Directivo" && c.estado === "aprobado_contable" && (
                             <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
+                          )}
+                          {usuario.rol === "Directivo" && c.estado === "pendiente_contable" && c.revision_contable_estado === "error" && (
+                            <button onClick={() => reintentarRevisionContable(c.id)} title={c.revision_contable_error || "Falló el envío a revisión contable"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Rev. contable</button>
                           )}
                           {usuario.rol === "Directivo" && c.estado === "aprobado_total" && c.legalizacion_estado === "error" && (
                             <button onClick={() => reintentarLegalizacion(c.id)} title={c.legalizacion_error || "Falló el envío a legalización"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Legalización</button>

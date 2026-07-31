@@ -188,13 +188,13 @@ export async function crearCuentaCobro({project, proveedor, concepto, cantidad, 
     valor: +valor||0,
     observaciones: observaciones||null,
     soportes: soportes||[],
-    estado: 'pendiente',
+    estado: 'pendiente_contable',
     autor, autor_id: autorId,
     historial: [{accion:'Creado', por:autor, fecha:new Date().toISOString()}],
   };
   const { error } = await supabase.from('cuentas_cobro').insert(row);
   if(error){ console.error('Error creando cuenta de cobro:', error); return false; }
-  return true;
+  return row.id;
 }
 
 export { subirSoporteCuentaCobro };
@@ -214,7 +214,8 @@ export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivo
 }
 
 // Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
-// se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente").
+// se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente_contable"
+// para que pase de nuevo por la revisión de contabilidad).
 export async function actualizarCuentaCobro(id, {project, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes}, editor, estabaDevuelto){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
   const accion = estabaDevuelto ? 'Corregido y reenviado' : 'Editado';
@@ -226,7 +227,7 @@ export async function actualizarCuentaCobro(id, {project, proveedor, concepto, c
     valor: +valor||0,
     observaciones: observaciones||null,
     soportes: soportes||[],
-    estado: estabaDevuelto ? 'pendiente' : undefined,
+    estado: estabaDevuelto ? 'pendiente_contable' : undefined,
     historial,
   }).eq('id', id);
   if(error){ console.error('Error editando cuenta de cobro:', error); return false; }
@@ -264,6 +265,15 @@ export async function legalizarPago(cuentaId){
 export async function enviarFacturaLegalizacion(cuentaId, facturaUrl){
   const { data, error } = await supabase.functions.invoke('enviar-factura-legalizacion', { body: { cuentaId, facturaUrl } });
   if(error){ console.error('Error invocando enviar-factura-legalizacion:', error); return false; }
+  return !!data?.ok;
+}
+
+// Empuja la cuenta de cobro a la app administrativa para que Contabilidad
+// la revise ANTES de la aprobación final del Directivo. Se llama al
+// registrar una cuenta nueva o al reenviarla tras un "devuelto".
+export async function enviarRevisionContable(cuentaId){
+  const { data, error } = await supabase.functions.invoke('revision-cuenta-cobro', { body: { cuentaId } });
+  if(error){ console.error('Error invocando revision-cuenta-cobro:', error); return false; }
   return !!data?.ok;
 }
 
