@@ -31,7 +31,8 @@ const soportesDe = (cuenta) =>
 
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
-  const [project, setProject] = useState(editando?.project || PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
+  const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado || PROJECTS[0]);
   const [proveedor, setProveedor] = useState(editando?.proveedor || "");
   const [proveedores, setProveedores] = useState([]);
   useEffect(() => { loadProveedores().then(setProveedores); }, []);
@@ -138,7 +139,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Proyecto</label>
           <select style={INP} value={project} onChange={e => setProject(e.target.value)}>
-            {PROJECTS.map(p => <option key={p}>{p}</option>)}
+            {proyectosDisponibles.map(p => <option key={p}>{p}</option>)}
           </select>
         </div>
         <div>

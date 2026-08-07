@@ -9,7 +9,8 @@ export function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   // Informes de antes del sistema de semana única no tienen "estado" guardado;
   // como ya fueron enviados en su momento, se tratan como "enviado" al editarlos.
   const estadoActual = initial ? (initial.estado || "enviado") : undefined;
-  const [project,setProject]=useState(initial?.project||PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
+  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [days,setDays]=useState(initial?.days||Array.from({length:7},emptyDay));
@@ -83,7 +84,7 @@ export function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Proyecto</label>
-            <select style={INP} value={project} onChange={e=>chgProj(e.target.value)}>{PROJECTS.map(p=><option key={p}>{p}</option>)}</select>
+            <select style={INP} value={project} onChange={e=>chgProj(e.target.value)}>{proyectosDisponibles.map(p=><option key={p}>{p}</option>)}</select>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>

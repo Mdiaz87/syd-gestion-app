@@ -10,7 +10,8 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const initial = editingReport;
   const initFrentes = (proj) => (FRENTES_POR_PROYECTO[proj]||FRENTES_MASTER).map(nombre=>emptyFrente(nombre));
 
-  const [project,setProject]=useState(initial?.project||PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
+  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [type,setType]=useState(initial?.type||"mensual");
   const now=new Date();
@@ -136,7 +137,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Proyecto</label>
-            <select style={INP} value={project} onChange={e=>chgProj(e.target.value)}>{PROJECTS.map(p=><option key={p}>{p}</option>)}</select>
+            <select style={INP} value={project} onChange={e=>chgProj(e.target.value)}>{proyectosDisponibles.map(p=><option key={p}>{p}</option>)}</select>
           </div>
           <div>
             <label style={{color:C.muted,fontSize:12}}>Elaborado por</label>

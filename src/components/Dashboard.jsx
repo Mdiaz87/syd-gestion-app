@@ -4,9 +4,14 @@ import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PRE
 import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
 import { Badge, Bar } from "./ui.jsx";
 
-export function Dashboard({reports,presupuestos}){
+export function Dashboard({reports,presupuestos,usuario}){
+  // Un usuario con proyecto_asignado (ej. cuenta externa limitada a un solo
+  // proyecto) solo ve ese proyecto en todo el Dashboard, en vez de los 12 —
+  // la protección real ya la da RLS (reports/presupuestos ya llegan filtrados),
+  // esto es para no mostrar tarjetas vacías de proyectos que no le corresponden.
+  const proyectosVisibles = usuario?.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
   const byProj={};
-  PROJECTS.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
+  proyectosVisibles.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
 
   const recordatorios=useMemo(()=>{
     const semanaActual=getMondayStr();
@@ -32,7 +37,7 @@ export function Dashboard({reports,presupuestos}){
       const anioTexto = parseInt(partes[1], 10);
       return Number.isFinite(anioTexto) ? anioTexto===anioObjetivo : true;
     };
-    return PROJECTS.map(proj=>{
+    return proyectosVisibles.map(proj=>{
       const coordEnviado=reports.some(r=>r.role==="Coordinador"&&r.project===proj&&r.semana===semanaActual&&r.estado==="enviado");
       const ingEnviado=reports.some(r=>r.role==="Ingeniero"&&r.project===proj&&r.type==="mensual"&&coincideMes(r.mes));
       return {
@@ -80,7 +85,7 @@ export function Dashboard({reports,presupuestos}){
   },[presByProject,cumByProject]);
 
   const ranking=useMemo(()=>{
-    return PROJECTS.map(proj=>{
+    return proyectosVisibles.map(proj=>{
       const reps=byProj[proj];
       const last=reps[reps.length-1];
       const cats=presByProject[proj]||[];
@@ -111,7 +116,7 @@ export function Dashboard({reports,presupuestos}){
     return acc;
   },[reports]);
 
-  const [mesTabProj,setMesTabProj]=useState(PROJECTS[0]);
+  const [mesTabProj,setMesTabProj]=useState(proyectosVisibles[0]);
 
   return (
     <div>
@@ -167,7 +172,7 @@ export function Dashboard({reports,presupuestos}){
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
-        {PROJECTS.map(proj=>{
+        {proyectosVisibles.map(proj=>{
           const reps=byProj[proj];
           if(!reps.length)return (
             <div key={proj} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16}}>
@@ -312,7 +317,7 @@ export function Dashboard({reports,presupuestos}){
           <div style={{marginTop:32}}>
             <h3 style={{color:C.blue,fontWeight:800,marginBottom:12,fontSize:16}}>📅 Seguimiento Mensual de Ejecución</h3>
             <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-              {PROJECTS.map(p=>(
+              {proyectosVisibles.map(p=>(
                 <button key={p} onClick={()=>setMesTabProj(p)} style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${mesTabProj===p?C.blue:C.border}`,background:mesTabProj===p?C.blue:"transparent",color:mesTabProj===p?"#fff":C.muted,fontWeight:mesTabProj===p?700:400,fontSize:12,cursor:"pointer"}}>{p}</button>
               ))}
             </div>

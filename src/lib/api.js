@@ -50,9 +50,16 @@ export async function saveDestinatarios(project, emails){
 
 // ── USUARIOS (Supabase Auth real — el PIN nunca se guarda en una tabla) ──────
 export async function loadUsuarios(){
-  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin').order('nombre');
+  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin,proyecto_asignado').order('nombre');
   if(error){ console.error('Error cargando usuarios:', error); return []; }
   return data || [];
+}
+// Arma el objeto de sesión (camelCase) a partir de una fila cruda de
+// `profiles` (snake_case) — usado tanto en login directo como al restaurar
+// sesión, para que ambos caminos queden siempre consistentes.
+export function shapeUsuario(profile){
+  const { id, nombre, rol, activo, es_super_admin, proyecto_asignado } = profile;
+  return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin, proyectoAsignado: proyecto_asignado || null };
 }
 // Antes de intentar el login se consulta el bloqueo por fuerza bruta
 // (RPC server-side, no depende de nada guardado en el navegador — ver
@@ -73,8 +80,7 @@ export async function login(profile, pin){
     await supabase.rpc('registrar_intento_fallido', { p_profile_id: profile.id });
     return null;
   }
-  const { id, nombre, rol, activo, es_super_admin } = profile;
-  return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin };
+  return shapeUsuario(profile);
 }
 // Solo puede usarla la cuenta marcada como es_super_admin en profiles —
 // corre en una Edge Function con la clave de servicio, nunca en el cliente.

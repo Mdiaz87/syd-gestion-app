@@ -195,6 +195,7 @@ export function ConsultasPanel({reports,usuario,presupuestos}){
   const [recientes,setRecientes]=useState(lsGet);
 
   const misProyectos=useMemo(()=>{
+    if(usuario.proyectoAsignado) return [usuario.proyectoAsignado];
     if(usuario.rol==='Directivo') return PROJECTS;
     return PROJECTS.filter(p=>reports.some(r=>r.author===usuario.nombre&&r.project===p));
   },[reports,usuario]);

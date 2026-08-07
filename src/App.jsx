@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "./supabase.js";
 import { C, PROJECTS } from "./lib/constants.js";
 import { getMondayStr, exportarJSON, puedeGestionar } from "./lib/helpers.js";
-import { loadReports, saveReport, deleteReport, loadDestinatarios, saveDestinatarios, loadUsuarios, loadAllPresupuestoProyecto, cambiarMiPin, loadCuentasCobro } from "./lib/api.js";
+import { loadReports, saveReport, deleteReport, loadDestinatarios, saveDestinatarios, loadUsuarios, loadAllPresupuestoProyecto, cambiarMiPin, loadCuentasCobro, shapeUsuario } from "./lib/api.js";
 import { enviarADrive } from "./lib/pdf.js";
 import { SydLogo, ConfirmModal, DestinatariosManager, CambiarPinModal } from "./components/ui.jsx";
 import { CoordForm } from "./components/CoordForm.jsx";
@@ -63,7 +63,7 @@ export default function App(){
     const { data:{ session } } = await supabase.auth.getSession();
     if(session){
       const v=u.find(x=>x.id===session.user.id&&x.activo);
-      if(v) setUsuario(v);
+      if(v) setUsuario(shapeUsuario(v));
     }
     if(r===null){
       setLoadError(true);
@@ -153,8 +153,12 @@ export default function App(){
     }}/>
   );
 
+  // Un Directivo con proyecto_asignado (ej. cuenta de cliente/externo limitada
+  // a un solo proyecto) no ve "Equipo" — esa pestaña administra el personal de
+  // TODA la empresa, no datos de un proyecto puntual.
+  const proyectosVisibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
   const tabs = usuario.rol==="Directivo"
-    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},{id:"equipo",label:"👥 Equipo"}]
+    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
     ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
@@ -213,7 +217,7 @@ export default function App(){
             )}
           </div>
         )}
-        {tab==="dashboard"&&<Dashboard reports={reports} presupuestos={presupuestos}/>}
+        {tab==="dashboard"&&<Dashboard reports={reports} presupuestos={presupuestos} usuario={usuario}/>}
       {tab==="informes"&&(
         <div>
           {loadError&&(
@@ -289,22 +293,24 @@ export default function App(){
         {tab==="pagos"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&(
           <CuentasCobro cuentas={cuentasCobro} usuario={usuario} onRefresh={async()=>setCuentasCobro(await loadCuentasCobro())}/>
         )}
-        {tab==="equipo"&&usuario.rol==="Directivo"&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
+        {tab==="equipo"&&usuario.rol==="Directivo"&&!usuario.proyectoAsignado&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
             <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Destinatarios por Proyecto</h2>
             <div style={{display:"grid",gap:10}}>
-              <div onClick={()=>{setDestProject("_contabilidad");setShowDest(true);}}
-                style={{background:C.bgCard,border:`1px solid ${C.blueMid}`,borderRadius:12,padding:16,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{color:C.blueMid,fontWeight:700}}>📧 Contabilidad (Aprobación de Pagos)</div>
-                  <div style={{color:C.muted,fontSize:12,marginTop:4}}>
-                    {(destinatarios["_contabilidad"]||[]).length>0 ? (destinatarios["_contabilidad"]||[]).join(", ") : "Sin destinatarios"}
+              {!usuario.proyectoAsignado&&(
+                <div onClick={()=>{setDestProject("_contabilidad");setShowDest(true);}}
+                  style={{background:C.bgCard,border:`1px solid ${C.blueMid}`,borderRadius:12,padding:16,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{color:C.blueMid,fontWeight:700}}>📧 Contabilidad (Aprobación de Pagos)</div>
+                    <div style={{color:C.muted,fontSize:12,marginTop:4}}>
+                      {(destinatarios["_contabilidad"]||[]).length>0 ? (destinatarios["_contabilidad"]||[]).join(", ") : "Sin destinatarios"}
+                    </div>
                   </div>
+                  <span style={{color:C.blueMid,fontSize:13,fontWeight:600}}>Editar →</span>
                 </div>
-                <span style={{color:C.blueMid,fontSize:13,fontWeight:600}}>Editar →</span>
-              </div>
-              {PROJECTS.map(p=>(
+              )}
+              {proyectosVisibles.map(p=>(
                 <div key={p} onClick={()=>{setDestProject(p);setShowDest(true);}}
                   style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:16,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div>
