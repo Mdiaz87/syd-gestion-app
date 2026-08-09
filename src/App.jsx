@@ -37,16 +37,19 @@ export default function App(){
   const [cuentasCobro,setCuentasCobro]=useState([]);
   const [showCambiarPin,setShowCambiarPin]=useState(false);
 
-  const borradorSemana=useMemo(()=>{
+  // Un Coordinador solo puede tener UN informe "en proceso" a la vez — si
+  // dejó un borrador de una semana anterior sin enviar, hay que resolverlo
+  // (enviarlo o descartarlo) antes de dejarlo abrir uno nuevo. Si el
+  // borrador es de la semana actual, se retoma automáticamente como siempre.
+  const borradorActivo=useMemo(()=>{
     if(!usuario||usuario.rol!=="Coordinador") return null;
-    const semana=getMondayStr();
-    return reports.find(r=>
-      r.role==="Coordinador"&&
-      r.coordinadorId===usuario.id&&
-      r.semana===semana&&
-      r.estado==="borrador"
-    )||null;
+    const propios=reports.filter(r=>r.role==="Coordinador"&&r.coordinadorId===usuario.id&&r.estado==="borrador");
+    if(!propios.length) return null;
+    return [...propios].sort((a,b)=>a.semana.localeCompare(b.semana))[0];
   },[reports,usuario]);
+  const semanaActualStr=getMondayStr();
+  const borradorAtrasado = borradorActivo&&borradorActivo.semana!==semanaActualStr ? borradorActivo : null;
+  const borradorSemana = borradorActivo&&borradorActivo.semana===semanaActualStr ? borradorActivo : null;
 
   const yaEnviadoEstaSemana=useMemo(()=>{
     if(!usuario||usuario.rol!=="Coordinador") return false;
@@ -264,12 +267,21 @@ export default function App(){
           <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario} destinatarios={destinatarios}/>
         </div>
       )}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&!borradorSemana&&(
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&borradorAtrasado&&(
+          <div style={{background:C.danger+"12",border:`1px solid ${C.danger}`,borderRadius:10,padding:"14px 16px",marginBottom:16}}>
+            <div style={{color:C.danger,fontWeight:700,fontSize:13,marginBottom:10}}>⚠️ Tienes un informe de la semana del {borradorAtrasado.semana} sin enviar. Debes enviarlo (aunque sea tarde) o descartarlo antes de crear uno nuevo.</div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setEditingReport(borradorAtrasado)} style={{background:C.blue,color:"#fff",fontWeight:700,border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,cursor:"pointer"}}>Continuar y enviar ese</button>
+              <button onClick={()=>setDeletingReport(borradorAtrasado)} style={{background:"none",color:C.danger,fontWeight:700,border:`1px solid ${C.danger}`,borderRadius:8,padding:"9px 16px",fontSize:13,cursor:"pointer"}}>Descartar ese informe</button>
+            </div>
+          </div>
+        )}
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&!borradorSemana&&!borradorAtrasado&&(
           yaEnviadoEstaSemana
             ? <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.green,fontWeight:600,fontSize:13}}>✅ Ya enviaste el informe de esta semana. Si necesitas corregir algo, hazlo desde "Ver Informes".</div>
             : <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.warn,fontWeight:600,fontSize:13}}>📌 Recordatorio: aún no envías el informe semanal. No olvides enviarlo antes de que termine la semana.</div>
         )}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Coordinador"&&(!borradorAtrasado||editingReport)&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
           <div>
