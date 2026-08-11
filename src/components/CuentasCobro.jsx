@@ -251,7 +251,15 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
         <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
           <div><b>Concepto:</b> {cuenta.concepto}</div>
           {cuenta.cantidad && <div><b>Cantidad:</b> {cuenta.cantidad} {cuenta.unidad}</div>}
-          <div><b>Valor:</b> {fmt(cuenta.valor)}</div>
+          {cuenta.valor_final_pagar != null ? (
+            <>
+              <div><b>Valor registrado:</b> <span style={{ textDecoration: "line-through", color: C.muted }}>{fmt(cuenta.valor)}</span></div>
+              {!!cuenta.retencion && <div><b>Retención aplicada por Contabilidad:</b> {fmt(cuenta.retencion)}</div>}
+              <div><b>Valor final a pagar:</b> <span style={{ color: C.green, fontWeight: 700 }}>{fmt(cuenta.valor_final_pagar)}</span></div>
+            </>
+          ) : (
+            <div><b>Valor:</b> {fmt(cuenta.valor)}</div>
+          )}
           {cuenta.observaciones && <div><b>Observaciones:</b> {cuenta.observaciones}</div>}
           <div><b>Registrado por:</b> {cuenta.autor}</div>
           {soportesDe(cuenta).length > 0 && (
@@ -471,7 +479,10 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>{c.project}</td>
                       <td style={{ padding: "9px 12px", color: C.muted }}>{c.proveedor}</td>
                       <td style={{ padding: "9px 12px", color: C.text }}>{c.concepto}{c.cantidad ? ` · ${c.cantidad} ${c.unidad || ""}` : ""}</td>
-                      <td style={{ padding: "9px 12px", color: C.text, fontWeight: 600, whiteSpace: "nowrap" }}>{fmt(c.valor)}</td>
+                      <td style={{ padding: "9px 12px", color: C.text, fontWeight: 600, whiteSpace: "nowrap" }} title={c.valor_final_pagar != null ? `Valor registrado: ${fmt(c.valor)}${c.retencion ? ` · Retención: ${fmt(c.retencion)}` : ""}` : undefined}>
+                        {c.valor_final_pagar != null ? fmt(c.valor_final_pagar) : fmt(c.valor)}
+                        {c.valor_final_pagar != null && <span style={{ color: C.warn, fontSize: 10, marginLeft: 4 }} title="Valor corregido por Contabilidad">✏️</span>}
+                      </td>
                       <td style={{ padding: "9px 12px" }}>
                         <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, border: `1px solid ${info.color}44`, whiteSpace: "nowrap" }}>{info.label}</span>
                       </td>
