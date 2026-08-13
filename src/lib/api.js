@@ -265,6 +265,16 @@ export async function legalizarPago(cuentaId){
   return !!data?.ok;
 }
 
+// Al aprobar totalmente una cuenta de cobro, además de legalizar-pago, crea
+// la obligación correspondiente en Cuentas por Pagar de la otra app
+// (Edge Function `aprobacion-cuenta-cobro`). Si falla, no bloquea nada —
+// solo marca aprobacion_cxp_estado='error' para poder reintentar.
+export async function aprobarCuentaPorPagar(cuentaId){
+  const { data, error } = await supabase.functions.invoke('aprobacion-cuenta-cobro', { body: { cuentaId } });
+  if(error){ console.error('Error invocando aprobacion-cuenta-cobro:', error); return false; }
+  return !!data?.ok;
+}
+
 // Sube la factura definitiva de legalización (llega DESPUÉS del pago, la
 // entrega el proveedor — distinta del soporte inicial) y la asocia al
 // registro correcto en la app de contabilidad vía referenciaExterna.

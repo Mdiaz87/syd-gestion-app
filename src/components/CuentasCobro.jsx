@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -231,14 +231,15 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
     const ok = await actualizarEstadoCuentaCobro(cuenta.id, estado,
       { condicion: estado === "devuelto" ? texto.trim() : null, motivoRechazo: estado === "rechazado" ? texto.trim() : null },
       revisadoPor);
-    let notifOk = true, legalizacionOk = true;
+    let notifOk = true, legalizacionOk = true, aprobacionCxpOk = true;
     if (ok && estado === "aprobado_total") {
       notifOk = await notificarPagoAprobado({ ...cuenta, estado });
       legalizacionOk = await legalizarPago(cuenta.id);
+      aprobacionCxpOk = await aprobarCuentaPorPagar(cuenta.id);
     }
     setEnviando(false);
     if (!ok) { setError("⚠️ No se pudo guardar la decisión. Intenta de nuevo."); return; }
-    onResuelto(estado, notifOk, legalizacionOk);
+    onResuelto(estado, notifOk, legalizacionOk, aprobacionCxpOk);
     onClose();
   };
 
@@ -380,12 +381,14 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     });
   }, [cuentas, search, fProyecto, fEstado]);
 
-  const onResuelto = (estado, notifOk, legalizacionOk) => {
+  const onResuelto = (estado, notifOk, legalizacionOk, aprobacionCxpOk) => {
     onRefresh();
     if (estado === "aprobado_total" && !notifOk) {
       setAviso("⚠️ Se guardó la decisión, pero no se pudo notificar a contabilidad por correo. Avísales manualmente.");
     } else if (estado === "aprobado_total" && !legalizacionOk) {
       setAviso("⚠️ Se aprobó, pero no se pudo enviar a la app de legalización. Usa el botón 🔁 en la tabla para reintentar.");
+    } else if (estado === "aprobado_total" && !aprobacionCxpOk) {
+      setAviso("⚠️ Se aprobó, pero no se pudo crear la obligación en Cuentas por Pagar. Usa el botón 🔁 en la tabla para reintentar.");
     } else {
       setAviso("✅ Decisión guardada correctamente.");
     }
@@ -397,6 +400,14 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     const ok = await legalizarPago(id);
     onRefresh();
     setAviso(ok ? "✅ Enviado a legalización correctamente." : "⚠️ Sigue fallando el envío a legalización.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
+  const reintentarAprobacionCxp = async (id) => {
+    setAviso("Reintentando...");
+    const ok = await aprobarCuentaPorPagar(id);
+    onRefresh();
+    setAviso(ok ? "✅ Obligación creada en Cuentas por Pagar correctamente." : "⚠️ Sigue fallando la creación en Cuentas por Pagar.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -502,6 +513,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           )}
                           {usuario.rol === "Directivo" && c.estado === "aprobado_total" && c.legalizacion_estado === "error" && (
                             <button onClick={() => reintentarLegalizacion(c.id)} title={c.legalizacion_error || "Falló el envío a legalización"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Legalización</button>
+                          )}
+                          {usuario.rol === "Directivo" && c.estado === "aprobado_total" && c.aprobacion_cxp_estado === "error" && (
+                            <button onClick={() => reintentarAprobacionCxp(c.id)} title={c.aprobacion_cxp_error || "Falló la creación en Cuentas por Pagar"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Cuentas x Pagar</button>
                           )}
                           {c.estado === "aprobado_total" && (usuario.rol === "Directivo" || c.autor_id === usuario.id) && (
                             <button onClick={() => setFacturando(c)} title={c.factura_legalizacion_url ? "Ya tiene factura — click para reemplazarla" : "Adjuntar factura de legalización"} style={{ ...BTN_SM, color: c.factura_legalizacion_url ? C.green : C.blueMid, borderColor: c.factura_legalizacion_url ? C.green : C.blueMid }}>
