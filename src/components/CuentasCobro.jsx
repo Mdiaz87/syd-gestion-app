@@ -363,7 +363,8 @@ function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
 export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [search, setSearch] = useState("");
   const [fProyecto, setFProyecto] = useState("");
-  const [fEstado, setFEstado] = useState("");
+  const [quickFilter, setQuickFilter] = useState("");
+  const [visibleCount, setVisibleCount] = useState(25);
   const [revisando, setRevisando] = useState(null);
   const [editando, setEditando] = useState(null);
   const [facturando, setFacturando] = useState(null);
@@ -371,15 +372,24 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
+  const pendientesAprobacion = useMemo(() =>
+    usuario.rol === "Directivo" ? cuentas.filter(c => c.estado === "aprobado_contable") : [],
+    [cuentas, usuario]);
+
   const filtradas = useMemo(() => {
     const q = search.trim().toLowerCase();
     return [...cuentas].filter(c => {
       if (q && !((c.project || "").toLowerCase().includes(q) || (c.proveedor || "").toLowerCase().includes(q))) return false;
       if (fProyecto && c.project !== fProyecto) return false;
-      if (fEstado && c.estado !== fEstado) return false;
+      if (quickFilter === "pendientes_mias" && c.estado !== "aprobado_contable") return false;
+      if (quickFilter === "revision_contable" && c.estado !== "pendiente_contable") return false;
+      if (quickFilter === "aprobadas" && c.estado !== "aprobado_total") return false;
+      if (quickFilter === "devueltas_rechazadas" && !(c.estado === "devuelto" || c.estado === "rechazado")) return false;
       return true;
     });
-  }, [cuentas, search, fProyecto, fEstado]);
+  }, [cuentas, search, fProyecto, quickFilter]);
+
+  useEffect(() => { setVisibleCount(25); }, [search, fProyecto, quickFilter]);
 
   const onResuelto = (estado, notifOk, legalizacionOk, aprobacionCxpOk) => {
     onRefresh();
@@ -453,16 +463,49 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      {pendientesAprobacion.length > 0 && (
+        <div style={{ background: C.warn + "10", border: `1px solid ${C.warn}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>🔔 Pendientes de tu aprobación ({pendientesAprobacion.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendientesAprobacion.map(c => (
+              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13 }}>
+                  <b style={{ color: C.blue }}>{c.project}</b> · {c.proveedor} · <span style={{ color: C.muted }}>{c.concepto}</span> · <span style={{ fontWeight: 700 }}>{fmt(c.valor_final_pagar ?? c.valor)}</span>
+                </div>
+                <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <input style={INP} placeholder="Buscar por proyecto, proveedor..." value={search} onChange={e => setSearch(e.target.value)} />
         <select style={INP} value={fProyecto} onChange={e => setFProyecto(e.target.value)}>
           <option value="">Proyecto: todos</option>
           {proyectos.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select style={INP} value={fEstado} onChange={e => setFEstado(e.target.value)}>
-          <option value="">Estado: todos</option>
-          {Object.entries(ESTADO_INFO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {[
+          { key: "", label: "Todas" },
+          ...(usuario.rol === "Directivo" ? [{ key: "pendientes_mias", label: "🔔 Pendientes de tu aprobación" }] : []),
+          { key: "revision_contable", label: "En revisión contable" },
+          { key: "aprobadas", label: "Aprobadas" },
+          { key: "devueltas_rechazadas", label: "Devueltas / Rechazadas" },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setQuickFilter(f.key)}
+            style={{
+              border: `1px solid ${quickFilter === f.key ? C.blue : C.border}`,
+              background: quickFilter === f.key ? C.blue : C.bgCard,
+              color: quickFilter === f.key ? "#fff" : C.text,
+              borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}
+          >{f.label}</button>
+        ))}
       </div>
 
       {!cuentas.length && <Card><div style={{ color: C.muted, textAlign: "center", padding: 16 }}>No hay cuentas de cobro registradas aún.</div></Card>}
@@ -483,7 +526,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                 {!filtradas.length && (
                   <tr><td colSpan={6} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
-                {filtradas.map(c => {
+                {filtradas.slice(0, visibleCount).map(c => {
                   const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable;
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -533,6 +576,13 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
               </tbody>
             </table>
           </div>
+          {filtradas.length > visibleCount && (
+            <div style={{ textAlign: "center", marginTop: 14 }}>
+              <button onClick={() => setVisibleCount(v => v + 25)} style={{ ...BTN_SM, padding: "8px 20px" }}>
+                Cargar más ({filtradas.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </>
       )}
 
