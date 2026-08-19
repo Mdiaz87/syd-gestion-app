@@ -30,11 +30,23 @@ const soportesDe = (cuenta) =>
   cuenta.soportes?.length ? cuenta.soportes : (cuenta.link_soporte ? [{ nombre: "Soporte", url: cuenta.link_soporte }] : []);
 
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
+// Empresa -> Centro de Costo -> Categoría -> Subcategoría (todos en cascada;
+// categoría/subcategoría quedan vacías si el centro de costo no tiene definidas).
+const centrosDe = (empresa) => Object.keys(EMPRESAS_CENTROS_COSTO[empresa] || {});
+const categoriasDe = (empresa, cc) => Object.keys((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {});
+const subcategoriasDe = (empresa, cc, cat) => ((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {})[cat] || [];
+
 function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado || PROJECTS[0]);
-  const [empresa, setEmpresa] = useState(editando?.empresa || EMPRESAS[0]);
-  const [centroCosto, setCentroCosto] = useState(editando?.centro_costo || EMPRESAS_CENTROS_COSTO[editando?.empresa || EMPRESAS[0]][0]);
+  const empresaInicial = editando?.empresa || EMPRESAS[0];
+  const centroCostoInicial = editando?.centro_costo || centrosDe(empresaInicial)[0];
+  const categoriaInicial = editando?.categoria || categoriasDe(empresaInicial, centroCostoInicial)[0] || "";
+  const subcategoriaInicial = editando?.subcategoria || subcategoriasDe(empresaInicial, centroCostoInicial, categoriaInicial)[0] || "";
+  const [empresa, setEmpresa] = useState(empresaInicial);
+  const [centroCosto, setCentroCosto] = useState(centroCostoInicial);
+  const [categoria, setCategoria] = useState(categoriaInicial);
+  const [subcategoria, setSubcategoria] = useState(subcategoriaInicial);
   const [proveedor, setProveedor] = useState(editando?.proveedor || "");
   const [proveedores, setProveedores] = useState([]);
   useEffect(() => { loadProveedores().then(setProveedores); }, []);
@@ -72,12 +84,33 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
 
   const onChangeEmpresa = (e) => {
     const nuevaEmpresa = e.target.value;
+    const nuevoCentro = centrosDe(nuevaEmpresa)[0];
+    const nuevaCategoria = categoriasDe(nuevaEmpresa, nuevoCentro)[0] || "";
     setEmpresa(nuevaEmpresa);
-    setCentroCosto(EMPRESAS_CENTROS_COSTO[nuevaEmpresa][0]);
+    setCentroCosto(nuevoCentro);
+    setCategoria(nuevaCategoria);
+    setSubcategoria(subcategoriasDe(nuevaEmpresa, nuevoCentro, nuevaCategoria)[0] || "");
+  };
+
+  const onChangeCentroCosto = (e) => {
+    const nuevoCentro = e.target.value;
+    const nuevaCategoria = categoriasDe(empresa, nuevoCentro)[0] || "";
+    setCentroCosto(nuevoCentro);
+    setCategoria(nuevaCategoria);
+    setSubcategoria(subcategoriasDe(empresa, nuevoCentro, nuevaCategoria)[0] || "");
+  };
+
+  const onChangeCategoria = (e) => {
+    const nuevaCategoria = e.target.value;
+    setCategoria(nuevaCategoria);
+    setSubcategoria(subcategoriasDe(empresa, centroCosto, nuevaCategoria)[0] || "");
   };
 
   const reset = () => {
-    setEmpresa(EMPRESAS[0]); setCentroCosto(EMPRESAS_CENTROS_COSTO[EMPRESAS[0]][0]);
+    const nuevoCentro = centrosDe(EMPRESAS[0])[0];
+    const nuevaCategoria = categoriasDe(EMPRESAS[0], nuevoCentro)[0] || "";
+    setEmpresa(EMPRESAS[0]); setCentroCosto(nuevoCentro);
+    setCategoria(nuevaCategoria); setSubcategoria(subcategoriasDe(EMPRESAS[0], nuevoCentro, nuevaCategoria)[0] || "");
     setProveedor(""); setConcepto(ACTIVIDADES_CATALOGO[0]); setConceptoOtro("");
     setCantidad(""); setUnidad(UNIDADES[0]); setUnidadOtro("");
     setValor(""); setObservaciones(""); setArchivosNuevos([]); setSoportesExistentes([]);
@@ -110,13 +143,13 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
     let ok, cuentaId;
     if (editando) {
       ok = await actualizarCuentaCobro(editando.id, {
-        project, empresa, centroCosto, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        project, empresa, centroCosto, categoria, subcategoria, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes,
       }, usuario.nombre, editando.estado === "devuelto");
       cuentaId = editando.id;
     } else {
       cuentaId = await crearCuentaCobro({
-        project, empresa, centroCosto, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        project, empresa, centroCosto, categoria, subcategoria, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
         soportes, autor: usuario.nombre, autorId: usuario.id,
       });
@@ -170,11 +203,29 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
         </div>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Centro de costo</label>
-          <select style={INP} value={centroCosto} onChange={e => setCentroCosto(e.target.value)}>
-            {EMPRESAS_CENTROS_COSTO[empresa].map(c => <option key={c}>{c}</option>)}
+          <select style={INP} value={centroCosto} onChange={onChangeCentroCosto}>
+            {centrosDe(empresa).map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
       </div>
+      {categoriasDe(empresa, centroCosto).length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={{ color: C.muted, fontSize: 12 }}>Categoría</label>
+            <select style={INP} value={categoria} onChange={onChangeCategoria}>
+              {categoriasDe(empresa, centroCosto).map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          {subcategoriasDe(empresa, centroCosto, categoria).length > 0 && (
+            <div>
+              <label style={{ color: C.muted, fontSize: 12 }}>Subcategoría</label>
+              <select style={INP} value={subcategoria} onChange={e => setSubcategoria(e.target.value)}>
+                {subcategoriasDe(empresa, centroCosto, categoria).map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Concepto / Actividad</label>
@@ -276,6 +327,7 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
 
         <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
           {cuenta.empresa && <div><b>Empresa:</b> {cuenta.empresa}{cuenta.centro_costo ? ` · Centro de costo: ${cuenta.centro_costo}` : ""}</div>}
+          {cuenta.categoria && <div><b>Categoría:</b> {cuenta.categoria}{cuenta.subcategoria ? ` · Subcategoría: ${cuenta.subcategoria}` : ""}</div>}
           <div><b>Concepto:</b> {cuenta.concepto}</div>
           {cuenta.cantidad && <div><b>Cantidad:</b> {cuenta.cantidad} {cuenta.unidad}</div>}
           {cuenta.valor_final_pagar != null ? (

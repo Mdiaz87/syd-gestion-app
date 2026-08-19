@@ -185,10 +185,10 @@ export async function loadCuentasCobro(){
   return data || [];
 }
 
-export async function crearCuentaCobro({project, empresa, centroCosto, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, autor, autorId}){
+export async function crearCuentaCobro({project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, autor, autorId}){
   const row = {
     id: Date.now(),
-    project, empresa: empresa||null, centro_costo: centroCosto||null, proveedor, concepto,
+    project, empresa: empresa||null, centro_costo: centroCosto||null, categoria: categoria||null, subcategoria: subcategoria||null, proveedor, concepto,
     cantidad: cantidad===""?null:+cantidad,
     unidad: unidad||null,
     valor: +valor||0,
@@ -222,12 +222,12 @@ export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivo
 // Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
 // se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente_contable"
 // para que pase de nuevo por la revisión de contabilidad).
-export async function actualizarCuentaCobro(id, {project, empresa, centroCosto, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes}, editor, estabaDevuelto){
+export async function actualizarCuentaCobro(id, {project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes}, editor, estabaDevuelto){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
   const accion = estabaDevuelto ? 'Corregido y reenviado' : 'Editado';
   const historial = [...(actual?.historial||[]), {accion, por:editor, fecha:new Date().toISOString()}];
   const { error } = await supabase.from('cuentas_cobro').update({
-    project, empresa: empresa||null, centro_costo: centroCosto||null, proveedor, concepto,
+    project, empresa: empresa||null, centro_costo: centroCosto||null, categoria: categoria||null, subcategoria: subcategoria||null, proveedor, concepto,
     cantidad: cantidad===""?null:+cantidad,
     unidad: unidad||null,
     valor: +valor||0,
