@@ -36,6 +36,16 @@ export const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","
 export const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
 export const ACTIVIDADES_CATALOGO = ["Limpieza de vías","Limpieza zona puente","Limpieza general","Movimiento de tierra","Conformación de subrasante","Excavación mecánica","Relleno y compactación","Corte y nivelación","Reemplazo de material","Adecuación zona puente","Compactación de vía principal","Recepción de zahorra","Construcción de bordillos","Estabilización química","Riego y corte de terreno","Transporte de material interno","Otro"];
 export const UNIDADES = ["m³","m²","ml","horas","viajes","días","und","Otro"];
+// Empresa que realiza el pago -> sus centros de costo válidos (Cuentas de Cobro, 19/08).
+export const EMPRESAS_CENTROS_COSTO = {
+  "AL4M SAS": ["Baranoa","Citrino"],
+  "AQQUA CLUB SAS": ["Aqqua I, II, III"],
+  "GLIFE SAS": ["Casa Amatista","SMSM","Villa Lourdes"],
+  "ITAI EQUIPOS": ["Itai Equipos","MJDE","Obra Citrino"],
+  "SYD INVERSIONES": ["Alma Vaquera","Atalí","Brisas del Lago I","Casa Amatista","Casa La Granja","Lt El Refugio","Mi Casa con SYD","Oficina Sede Principal","San Miguel","Vivante","Vivante Norte"],
+  "SYD UNIVERSAL": ["Aqqua IV","Citrino"],
+};
+export const EMPRESAS = Object.keys(EMPRESAS_CENTROS_COSTO);
 export const OPERADORES_OPTS = ["1 Operador","2 Operadores","3 Operadores","4 Operadores","5 Operadores","Otro"];
 export const ETAPAS = ["Etapa 1","Etapa 2","Etapa 3","Etapa 4","General"];
 export const ROLES = ["Coordinador","Ingeniero","Directivo"];

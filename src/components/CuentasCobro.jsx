@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES } from "../lib/constants.js";
+import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
 import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
@@ -33,6 +33,8 @@ const soportesDe = (cuenta) =>
 function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado || PROJECTS[0]);
+  const [empresa, setEmpresa] = useState(editando?.empresa || EMPRESAS[0]);
+  const [centroCosto, setCentroCosto] = useState(editando?.centro_costo || EMPRESAS_CENTROS_COSTO[editando?.empresa || EMPRESAS[0]][0]);
   const [proveedor, setProveedor] = useState(editando?.proveedor || "");
   const [proveedores, setProveedores] = useState([]);
   useEffect(() => { loadProveedores().then(setProveedores); }, []);
@@ -68,7 +70,14 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   const quitarArchivoNuevo = (i) => setArchivosNuevos(prev => prev.filter((_, idx) => idx !== i));
   const quitarSoporteExistente = (i) => setSoportesExistentes(prev => prev.filter((_, idx) => idx !== i));
 
+  const onChangeEmpresa = (e) => {
+    const nuevaEmpresa = e.target.value;
+    setEmpresa(nuevaEmpresa);
+    setCentroCosto(EMPRESAS_CENTROS_COSTO[nuevaEmpresa][0]);
+  };
+
   const reset = () => {
+    setEmpresa(EMPRESAS[0]); setCentroCosto(EMPRESAS_CENTROS_COSTO[EMPRESAS[0]][0]);
     setProveedor(""); setConcepto(ACTIVIDADES_CATALOGO[0]); setConceptoOtro("");
     setCantidad(""); setUnidad(UNIDADES[0]); setUnidadOtro("");
     setValor(""); setObservaciones(""); setArchivosNuevos([]); setSoportesExistentes([]);
@@ -78,6 +87,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
     setError("");
     const conceptoFinal = concepto === "Otro" ? conceptoOtro.trim() : concepto;
     const unidadFinal = unidad === "Otro" ? unidadOtro.trim() : unidad;
+    if (!empresa) { setError("⚠️ Elige la empresa que va a realizar el pago."); return; }
+    if (!centroCosto) { setError("⚠️ Elige el centro de costo."); return; }
     if (!proveedor.trim()) { setError("⚠️ Escribe el proveedor/contratista."); return; }
     if (!conceptoFinal) { setError("⚠️ Escribe el concepto/actividad."); return; }
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
@@ -99,13 +110,13 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
     let ok, cuentaId;
     if (editando) {
       ok = await actualizarCuentaCobro(editando.id, {
-        project, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        project, empresa, centroCosto, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes,
       }, usuario.nombre, editando.estado === "devuelto");
       cuentaId = editando.id;
     } else {
       cuentaId = await crearCuentaCobro({
-        project, proveedor: proveedor.trim(), concepto: conceptoFinal,
+        project, empresa, centroCosto, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
         soportes, autor: usuario.nombre, autorId: usuario.id,
       });
@@ -148,6 +159,20 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
           <datalist id="proveedores-list">
             {proveedores.map(p => <option key={p.nombre} value={p.nombre} />)}
           </datalist>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div>
+          <label style={{ color: C.muted, fontSize: 12 }}>Empresa que realiza el pago</label>
+          <select style={INP} value={empresa} onChange={onChangeEmpresa}>
+            {EMPRESAS.map(e => <option key={e}>{e}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ color: C.muted, fontSize: 12 }}>Centro de costo</label>
+          <select style={INP} value={centroCosto} onChange={e => setCentroCosto(e.target.value)}>
+            {EMPRESAS_CENTROS_COSTO[empresa].map(c => <option key={c}>{c}</option>)}
+          </select>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
@@ -250,6 +275,7 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
         <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
 
         <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
+          {cuenta.empresa && <div><b>Empresa:</b> {cuenta.empresa}{cuenta.centro_costo ? ` · Centro de costo: ${cuenta.centro_costo}` : ""}</div>}
           <div><b>Concepto:</b> {cuenta.concepto}</div>
           {cuenta.cantidad && <div><b>Cantidad:</b> {cuenta.cantidad} {cuenta.unidad}</div>}
           {cuenta.valor_final_pagar != null ? (
