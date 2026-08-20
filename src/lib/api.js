@@ -219,6 +219,16 @@ export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivo
   return true;
 }
 
+// Marca/desmarca si el pago ya se realizó (uso interno de SYD, no se manda
+// a ninguna app externa). Solo tiene sentido en cuentas ya aprobadas.
+export async function marcarPagoRealizado(id, pagado, por){
+  const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
+  const historial = [...(actual?.historial||[]), {accion: pagado ? 'Marcado como pagado' : 'Marcado como pendiente de pago', por, fecha:new Date().toISOString()}];
+  const { error } = await supabase.from('cuentas_cobro').update({ pago_realizado: pagado, historial }).eq('id', id);
+  if(error){ console.error('Error marcando pago realizado:', error); return false; }
+  return true;
+}
+
 // Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
 // se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente_contable"
 // para que pase de nuevo por la revisión de contabilidad).

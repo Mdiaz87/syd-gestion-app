@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, marcarPagoRealizado, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -23,6 +23,10 @@ const fileToBase64 = (file) => new Promise((res, rej) => {
 
 const puedeEditar = (cuenta, usuario) =>
   (cuenta.estado === "pendiente_contable" || cuenta.estado === "devuelto") &&
+  (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
+
+const puedeMarcarPago = (cuenta, usuario) =>
+  cuenta.estado === "aprobado_total" &&
   (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
 
 // Compatibilidad: cuentas viejas solo tienen link_soporte (string único).
@@ -463,6 +467,8 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
       if (quickFilter === "revision_contable" && c.estado !== "pendiente_contable") return false;
       if (quickFilter === "aprobadas" && c.estado !== "aprobado_total") return false;
       if (quickFilter === "devueltas_rechazadas" && !(c.estado === "devuelto" || c.estado === "rechazado")) return false;
+      if (quickFilter === "por_pagar" && !(c.estado === "aprobado_total" && !c.pago_realizado)) return false;
+      if (quickFilter === "pagadas" && !(c.estado === "aprobado_total" && c.pago_realizado)) return false;
       return true;
     });
   }, [cuentas, search, fProyecto, quickFilter]);
@@ -496,6 +502,13 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     const ok = await aprobarCuentaPorPagar(id);
     onRefresh();
     setAviso(ok ? "✅ Obligación creada en Cuentas por Pagar correctamente." : "⚠️ Sigue fallando la creación en Cuentas por Pagar.");
+    setTimeout(() => setAviso(null), 5000);
+  };
+
+  const togglePago = async (c) => {
+    const ok = await marcarPagoRealizado(c.id, !c.pago_realizado, usuario.nombre);
+    onRefresh();
+    setAviso(ok ? (c.pago_realizado ? "✅ Marcada como pendiente de pago." : "✅ Marcada como pagada.") : "⚠️ No se pudo actualizar el estado de pago.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -571,6 +584,8 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
           ...(usuario.rol === "Directivo" ? [{ key: "pendientes_mias", label: "🔔 Pendientes de tu aprobación" }] : []),
           { key: "revision_contable", label: "En revisión contable" },
           { key: "aprobadas", label: "Aprobadas" },
+          { key: "por_pagar", label: "⏳ Por pagar" },
+          { key: "pagadas", label: "✅ Pagadas" },
           { key: "devueltas_rechazadas", label: "Devueltas / Rechazadas" },
         ].map(f => (
           <button
@@ -595,14 +610,14 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 720 }}>
               <thead>
                 <tr style={{ background: C.bgCard2, borderBottom: `2px solid ${C.border}` }}>
-                  {["Proyecto", "Proveedor", "Concepto", "Valor", "Estado", "Acciones"].map(h =>
+                  {["Proyecto", "Proveedor", "Concepto", "Valor", "Estado", "Pago", "Acciones"].map(h =>
                     <th key={h} style={{ textAlign: "left", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: .3, textTransform: "uppercase", padding: "10px 12px", whiteSpace: "nowrap" }}>{h}</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {!filtradas.length && (
-                  <tr><td colSpan={6} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
                 {filtradas.slice(0, visibleCount).map(c => {
                   const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable;
@@ -617,6 +632,19 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, border: `1px solid ${info.color}44`, whiteSpace: "nowrap" }}>{info.label}</span>
+                      </td>
+                      <td style={{ padding: "9px 12px" }}>
+                        {c.estado === "aprobado_total" ? (
+                          puedeMarcarPago(c, usuario) ? (
+                            <button onClick={() => togglePago(c)} style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, border: `1px solid ${c.pago_realizado ? C.green : C.warn}44`, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                              {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
+                            </button>
+                          ) : (
+                            <span style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
+                            </span>
+                          )
+                        ) : <span style={{ color: C.muted, fontSize: 12 }}>—</span>}
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         <div style={{ display: "flex", gap: 6, whiteSpace: "nowrap", alignItems: "center" }}>
