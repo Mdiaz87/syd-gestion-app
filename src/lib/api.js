@@ -224,8 +224,11 @@ export async function actualizarEstadoCuentaCobro(id, estado, {condicion, motivo
 export async function marcarPagoRealizado(id, pagado, por){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
   const historial = [...(actual?.historial||[]), {accion: pagado ? 'Marcado como pagado' : 'Marcado como pendiente de pago', por, fecha:new Date().toISOString()}];
-  const { error } = await supabase.from('cuentas_cobro').update({ pago_realizado: pagado, historial }).eq('id', id);
+  // .select() al final es necesario: si RLS bloquea la fila, Supabase no lanza
+  // error, simplemente actualiza 0 filas — sin esto no hay forma de notarlo.
+  const { data, error } = await supabase.from('cuentas_cobro').update({ pago_realizado: pagado, historial }).eq('id', id).select('id');
   if(error){ console.error('Error marcando pago realizado:', error); return false; }
+  if(!data?.length){ console.error('Actualización de pago bloqueada por permisos (0 filas afectadas) para cuenta', id); return false; }
   return true;
 }
 
