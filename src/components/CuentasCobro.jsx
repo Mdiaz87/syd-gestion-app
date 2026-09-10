@@ -27,11 +27,17 @@ const puedeEditar = (cuenta, usuario) =>
 
 const puedeMarcarPago = (cuenta, usuario) =>
   cuenta.estado === "aprobado_total" &&
-  (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
+  (usuario.rol === "Directivo" || usuario.rol === "Ingeniero");
 
 // Compatibilidad: cuentas viejas solo tienen link_soporte (string único).
 const soportesDe = (cuenta) =>
   cuenta.soportes?.length ? cuenta.soportes : (cuenta.link_soporte ? [{ nombre: "Soporte", url: cuenta.link_soporte }] : []);
+
+// Fecha del último "Marcado como pagado" en el historial (no hay columna aparte).
+const fechaPagoDe = (cuenta) =>
+  [...(cuenta.historial || [])].reverse().find(h => h.accion === "Marcado como pagado")?.fecha || null;
+
+const fechaCorta = (iso) => iso ? new Date(iso).toLocaleDateString("es-CO") : "—";
 
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 // Empresa -> Centro de Costo -> Categoría -> Subcategoría (todos en cascada;
@@ -610,19 +616,20 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 720 }}>
               <thead>
                 <tr style={{ background: C.bgCard2, borderBottom: `2px solid ${C.border}` }}>
-                  {["Proyecto", "Proveedor", "Concepto", "Valor", "Estado", "Pago", "Acciones"].map(h =>
+                  {["Fecha", "Proyecto", "Proveedor", "Concepto", "Valor", "Estado", "Pago", "Acciones"].map(h =>
                     <th key={h} style={{ textAlign: "left", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: .3, textTransform: "uppercase", padding: "10px 12px", whiteSpace: "nowrap" }}>{h}</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {!filtradas.length && (
-                  <tr><td colSpan={7} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
                 {filtradas.slice(0, visibleCount).map(c => {
                   const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable;
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "9px 12px", color: C.muted, whiteSpace: "nowrap" }}>{fechaCorta(c.created_at)}</td>
                       <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>{c.project}</td>
                       <td style={{ padding: "9px 12px", color: C.muted }}>{c.proveedor}</td>
                       <td style={{ padding: "9px 12px", color: C.text }}>{c.concepto}{c.cantidad ? ` · ${c.cantidad} ${c.unidad || ""}` : ""}</td>
@@ -635,15 +642,20 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         {c.estado === "aprobado_total" ? (
-                          puedeMarcarPago(c, usuario) ? (
-                            <button onClick={() => togglePago(c)} style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, border: `1px solid ${c.pago_realizado ? C.green : C.warn}44`, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
-                              {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
-                            </button>
-                          ) : (
-                            <span style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                              {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
-                            </span>
-                          )
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+                            {puedeMarcarPago(c, usuario) ? (
+                              <button onClick={() => togglePago(c)} style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, border: `1px solid ${c.pago_realizado ? C.green : C.warn}44`, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                                {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
+                              </button>
+                            ) : (
+                              <span style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                                {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
+                              </span>
+                            )}
+                            {c.pago_realizado && (
+                              <span style={{ color: C.muted, fontSize: 10, whiteSpace: "nowrap" }}>{fechaCorta(fechaPagoDe(c))}</span>
+                            )}
+                          </div>
                         ) : <span style={{ color: C.muted, fontSize: 12 }}>—</span>}
                       </td>
                       <td style={{ padding: "9px 12px" }}>
