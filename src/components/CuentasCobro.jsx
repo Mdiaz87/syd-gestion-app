@@ -47,8 +47,8 @@ const categoriasDe = (empresa, cc) => Object.keys((EMPRESAS_CENTROS_COSTO[empres
 const subcategoriasDe = (empresa, cc, cat) => ((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {})[cat] || [];
 
 function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
-  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
-  const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado || PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
+  const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado?.[0] || PROJECTS[0]);
   const empresaInicial = editando?.empresa || EMPRESAS[0];
   const centroCostoInicial = editando?.centro_costo || centrosDe(empresaInicial)[0];
   const categoriaInicial = editando?.categoria || categoriasDe(empresaInicial, centroCostoInicial)[0] || "";

@@ -9,8 +9,8 @@ export function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
   // Informes de antes del sistema de semana única no tienen "estado" guardado;
   // como ya fueron enviados en su momento, se tratan como "enviado" al editarlos.
   const estadoActual = initial ? (initial.estado || "enviado") : undefined;
-  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
-  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado||PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
+  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado?.[0]||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [days,setDays]=useState(initial?.days||Array.from({length:7},emptyDay));

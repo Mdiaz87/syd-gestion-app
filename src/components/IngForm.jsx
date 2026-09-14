@@ -10,8 +10,8 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const initial = editingReport;
   const initFrentes = (proj) => (FRENTES_POR_PROYECTO[proj]||FRENTES_MASTER).map(nombre=>emptyFrente(nombre));
 
-  const proyectosDisponibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
-  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado||PROJECTS[0]);
+  const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
+  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado?.[0]||PROJECTS[0]);
   const author = initial?.author || usuario.nombre;
   const [type,setType]=useState(initial?.type||"mensual");
   const now=new Date();

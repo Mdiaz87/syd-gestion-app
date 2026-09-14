@@ -9,7 +9,7 @@ export function Dashboard({reports,presupuestos,usuario}){
   // proyecto) solo ve ese proyecto en todo el Dashboard, en vez de los 12 —
   // la protección real ya la da RLS (reports/presupuestos ya llegan filtrados),
   // esto es para no mostrar tarjetas vacías de proyectos que no le corresponden.
-  const proyectosVisibles = usuario?.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
+  const proyectosVisibles = usuario?.proyectoAsignado || PROJECTS;
   const byProj={};
   proyectosVisibles.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
 

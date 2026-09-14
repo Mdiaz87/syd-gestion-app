@@ -159,7 +159,7 @@ export default function App(){
   // Un Directivo con proyecto_asignado (ej. cuenta de cliente/externo limitada
   // a un solo proyecto) no ve "Equipo" — esa pestaña administra el personal de
   // TODA la empresa, no datos de un proyecto puntual.
-  const proyectosVisibles = usuario.proyectoAsignado ? [usuario.proyectoAsignado] : PROJECTS;
+  const proyectosVisibles = usuario.proyectoAsignado || PROJECTS;
   const tabs = usuario.rol==="Directivo"
     ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
