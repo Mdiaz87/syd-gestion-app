@@ -228,7 +228,7 @@ export function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
       )}
       {estadoActual==="enviado"&&(
         <button onClick={()=>doSubmit("edicion")} disabled={sending||!!sent}
-          style={{width:"100%",background:sending||sent?C.border:C.blueMid,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.blueMid}55`}}>
+          style={{width:"100%",background:sending||sent?C.border:C.blueMid,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":"0 1px 2px rgba(0,0,0,0.18)"}}>
           {sending?"Guardando...":"✏️ Guardar Edición"}
         </button>
       )}
@@ -239,7 +239,7 @@ export function CoordForm({onSubmit, editingReport, onCancelEdit, usuario}){
             {sending?"Guardando...":"💾 Guardar progreso"}
           </button>
           <button onClick={()=>doSubmit("enviado")} disabled={sending||!!sent}
-            style={{flex:2,background:sending||sent?C.border:C.green,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":`0 3px 12px ${C.green}55`}}>
+            style={{flex:2,background:sending||sent?C.border:C.green,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",boxShadow:sending||sent?"none":"0 1px 2px rgba(0,0,0,0.18)"}}>
             {sending?"Guardando...":"✅ Enviar Informe de la Semana"}
           </button>
         </div>

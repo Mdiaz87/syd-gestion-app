@@ -93,10 +93,10 @@ export function ReportsTable({reports,onSelect,onEdit,onDelete,usuario,destinata
                       <td style={{padding:"9px 12px",color:C.muted}}>{r.author}</td>
                       <td style={{padding:"9px 12px",color:C.muted,whiteSpace:"nowrap"}}>{r.date}</td>
                       <td style={{padding:"9px 12px"}}>
-                        <span style={{background:tColor+"18",color:tColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${tColor}44`,whiteSpace:"nowrap"}}>{TIPO_LABEL[r.type]||r.type}</span>
+                        <span style={{background:tColor+"18",color:tColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px",whiteSpace:"nowrap"}}>{TIPO_LABEL[r.type]||r.type}</span>
                       </td>
                       <td style={{padding:"9px 12px"}}>
-                        <span style={{background:estColor+"22",color:estColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,border:`1px solid ${estColor}44`,whiteSpace:"nowrap"}}>{estLabel}</span>
+                        <span style={{background:estColor+"22",color:estColor,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px",whiteSpace:"nowrap"}}>{estLabel}</span>
                       </td>
                       <td style={{padding:"9px 12px"}}>
                         <div style={{display:"flex",gap:6,whiteSpace:"nowrap",alignItems:"center"}} onClick={e=>e.stopPropagation()}>

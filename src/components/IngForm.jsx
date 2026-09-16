@@ -433,7 +433,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
         </div>
       )}
       <button onClick={handleClick} disabled={sending||sent}
-        style={{background:sending||sent?C.border:C.blue,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",width:"100%",boxShadow:sending||sent?"none":`0 3px 12px ${C.blue}44`}}>
+        style={{background:sending||sent?C.border:C.blue,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:13,fontSize:15,cursor:sending||sent?"default":"pointer",width:"100%",boxShadow:sending||sent?"none":"0 1px 2px rgba(0,0,0,0.18)"}}>
         {sending?"Guardando...":sent?"✅ Enviado":editingReport?"Guardar Cambios":"Enviar Informe"}
       </button>
 

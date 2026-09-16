@@ -48,7 +48,7 @@ export function LoginScreen({usuarios, onLogin}){
           <div style={{fontSize:32,marginBottom:12}}>⚠️</div>
           <p style={{color:C.text,fontWeight:600,marginBottom:8}}>No hay usuarios configurados</p>
           <p style={{color:C.muted,fontSize:13,marginBottom:20}}>Ejecuta el SQL de configuración en Supabase para crear la tabla de usuarios y recarga la página.</p>
-          <button onClick={()=>window.location.reload()} style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"10px 24px",cursor:"pointer",fontWeight:600,fontSize:14}}>🔄 Recargar</button>
+          <button onClick={()=>window.location.reload()} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"10px 24px",cursor:"pointer",fontWeight:600,fontSize:14,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>🔄 Recargar</button>
         </div>
       ):(
         <>
@@ -69,7 +69,7 @@ export function LoginScreen({usuarios, onLogin}){
           {error&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>Código incorrecto. Intenta de nuevo.</div>}
           {bloqueoSegs>0&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>🔒 Demasiados intentos fallidos. Intenta de nuevo en {formatoEspera(bloqueoSegs)}.</div>}
           <button onClick={check} disabled={pin.length!==4||verificando||bloqueoSegs>0}
-            style={{background:pin.length===4&&!verificando&&bloqueoSegs===0?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:10,padding:13,fontSize:15,cursor:pin.length===4&&!verificando&&bloqueoSegs===0?"pointer":"not-allowed",width:"100%"}}>
+            style={{background:pin.length===4&&!verificando&&bloqueoSegs===0?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:13,fontSize:15,cursor:pin.length===4&&!verificando&&bloqueoSegs===0?"pointer":"not-allowed",width:"100%",boxShadow:pin.length===4&&!verificando&&bloqueoSegs===0?"0 1px 2px rgba(0,0,0,0.18)":"none"}}>
             {verificando?"Verificando...":bloqueoSegs>0?"Bloqueado temporalmente":"Entrar"}
           </button>
         </>
@@ -78,7 +78,7 @@ export function LoginScreen({usuarios, onLogin}){
   );
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Arial,sans-serif",padding:20}}>
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
       {card}
     </div>
   );

@@ -292,7 +292,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
       {enviado && <div style={{ background: C.green + "18", border: `1px solid ${C.green}`, borderRadius: 8, padding: 10, marginBottom: 12, color: C.green, fontWeight: 600, textAlign: "center" }}>✅ Cuenta de cobro registrada — queda pendiente de aprobación</div>}
       <div style={{ display: "flex", gap: 10 }}>
         {editando && <button onClick={onCancelarEdicion} style={{ ...BTN_SM, flex: 1, padding: 13 }}>Cancelar</button>}
-        <button onClick={submit} disabled={enviando} style={{ flex: editando ? 2 : 1, background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 10, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer" }}>
+        <button onClick={submit} disabled={enviando} style={{ flex: editando ? 2 : 1, background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 12, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer", boxShadow: enviando ? "none" : "0 1px 2px rgba(0,0,0,0.18)" }}>
           {enviando ? "Guardando..." : editando ? (editando.estado === "devuelto" ? "Guardar y reenviar" : "Guardar cambios") : "Registrar cuenta de cobro"}
         </button>
       </div>
@@ -332,7 +332,7 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
       <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px #0003", maxHeight: "90vh", overflowY: "auto" }}>
-        <h3 style={{ color: C.blue, margin: "0 0 4px" }}>Revisar cuenta de cobro</h3>
+        <h3 style={{ color: C.blue, margin: "0 0 4px", fontWeight: 600, letterSpacing: "-0.1px" }}>Revisar cuenta de cobro</h3>
         <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
 
         <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
@@ -376,9 +376,9 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
 
         {!modo && (
           <div style={{ display: "grid", gap: 8 }}>
-            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>✅ Aprobar</button>
-            <button onClick={() => setModo("devuelto")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>🔄 Devolver para corrección</button>
-            <button onClick={() => setModo("rechazado")} style={{ background: C.danger, color: "#fff", border: "none", borderRadius: 8, padding: 11, fontWeight: 700, cursor: "pointer" }}>❌ Rechazar</button>
+            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>✅ Aprobar</button>
+            <button onClick={() => setModo("devuelto")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>🔄 Devolver para corrección</button>
+            <button onClick={() => setModo("rechazado")} style={{ background: C.danger, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>❌ Rechazar</button>
             <button onClick={onClose} style={{ ...BTN_SM, padding: 10 }}>Cancelar</button>
           </div>
         )}
@@ -390,7 +390,7 @@ function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
             {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => { setModo(null); setError(""); }} style={{ ...BTN_SM, flex: 1, padding: 10 }}>Volver</button>
-              <button onClick={() => confirmar(modo)} disabled={enviando} style={{ background: modo === "rechazado" ? C.danger : C.blueMid, color: "#fff", border: "none", borderRadius: 8, padding: 10, flex: 1, fontWeight: 700, cursor: "pointer" }}>
+              <button onClick={() => confirmar(modo)} disabled={enviando} style={{ background: modo === "rechazado" ? C.danger : C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 10, flex: 1, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>
                 {enviando ? "Guardando..." : "Confirmar"}
               </button>
             </div>
@@ -426,7 +426,7 @@ function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
       <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", boxShadow: "0 10px 40px #0003" }}>
-        <h3 style={{ color: C.blue, margin: "0 0 4px" }}>Factura de legalización</h3>
+        <h3 style={{ color: C.blue, margin: "0 0 4px", fontWeight: 600, letterSpacing: "-0.1px" }}>Factura de legalización</h3>
         <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
         {cuenta.factura_legalizacion_url && (
           <div style={{ background: C.bgCard2, borderRadius: 8, padding: 10, fontSize: 13, marginBottom: 12 }}>
@@ -438,7 +438,7 @@ function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
         {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={{ ...BTN_SM, flex: 1, padding: 11 }}>Cancelar</button>
-          <button onClick={submit} disabled={enviando} style={{ background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 8, padding: 11, flex: 2, cursor: enviando ? "default" : "pointer" }}>
+          <button onClick={submit} disabled={enviando} style={{ background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 12, padding: 11, flex: 2, cursor: enviando ? "default" : "pointer", boxShadow: enviando ? "none" : "0 1px 2px rgba(0,0,0,0.18)" }}>
             {enviando ? "Enviando..." : "Enviar factura"}
           </button>
         </div>
@@ -638,17 +638,17 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                         {c.valor_final_pagar != null && <span style={{ color: C.warn, fontSize: 10, marginLeft: 4 }} title="Valor corregido por Contabilidad">✏️</span>}
                       </td>
                       <td style={{ padding: "9px 12px" }}>
-                        <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, border: `1px solid ${info.color}44`, whiteSpace: "nowrap" }}>{info.label}</span>
+                        <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, letterSpacing: "0.1px", whiteSpace: "nowrap" }}>{info.label}</span>
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         {c.estado === "aprobado_total" ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
                             {puedeMarcarPago(c, usuario) ? (
-                              <button onClick={() => togglePago(c)} style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, border: `1px solid ${c.pago_realizado ? C.green : C.warn}44`, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer" }}>
+                              <button onClick={() => togglePago(c)} style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, border: "none", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, letterSpacing: "0.1px", whiteSpace: "nowrap", cursor: "pointer" }}>
                                 {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
                               </button>
                             ) : (
-                              <span style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              <span style={{ background: c.pago_realizado ? C.green + "18" : C.warn + "18", color: c.pago_realizado ? C.green : C.warn, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, letterSpacing: "0.1px", whiteSpace: "nowrap" }}>
                                 {c.pago_realizado ? "✅ Pagado" : "⏳ Pendiente"}
                               </span>
                             )}

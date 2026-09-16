@@ -33,16 +33,16 @@ export function Bar({value,color}){
   </div>;
 }
 export function Badge({status}){
-  return <span style={{background:SEM_COLOR[status]+"18",color:SEM_COLOR[status],fontWeight:700,borderRadius:20,padding:"3px 12px",fontSize:11,border:`1px solid ${SEM_COLOR[status]}55`}}>{SEM_LABEL[status]}</span>;
+  return <span style={{background:SEM_COLOR[status]+"18",color:SEM_COLOR[status],fontWeight:600,letterSpacing:"0.1px",borderRadius:20,padding:"3px 12px",fontSize:11}}>{SEM_LABEL[status]}</span>;
 }
 export function SectionTitle({children,color}){
   return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
     <div style={{width:3,height:16,background:color||C.blue,borderRadius:2}}/>
-    <span style={{color:color||C.blue,fontWeight:700,fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>{children}</span>
+    <span style={{color:color||C.blue,fontWeight:600,fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>{children}</span>
   </div>;
 }
 export function Card({children,style={},borderColor}){
-  return <div style={{background:C.bgCard,borderRadius:12,padding:16,border:`1px solid ${borderColor||C.border}`,boxShadow:"0 1px 4px #0001",...style}}>{children}</div>;
+  return <div style={{background:C.bgCard,borderRadius:16,padding:16,border:`1px solid ${borderColor||C.border}`,boxShadow:"0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06)",...style}}>{children}</div>;
 }
 
 export function CambiarPinModal({onClose}){
@@ -65,13 +65,13 @@ export function CambiarPinModal({onClose}){
       <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:360,width:"100%",boxShadow:"0 10px 40px #0003"}}>
         {ok?(
           <>
-            <h3 style={{color:C.green,margin:"0 0 8px"}}>✅ Código actualizado</h3>
+            <h3 style={{color:C.green,margin:"0 0 8px",fontWeight:600,letterSpacing:"-0.1px"}}>✅ Código actualizado</h3>
             <p style={{color:C.text,fontSize:14,marginBottom:20}}>Tu código personal se cambió correctamente. Usalo la próxima vez que inicies sesión.</p>
-            <button onClick={onClose} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,width:"100%",cursor:"pointer",fontWeight:600}}>Entendido</button>
+            <button onClick={onClose} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:10,width:"100%",cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Entendido</button>
           </>
         ):(
           <>
-            <h3 style={{color:C.blue,margin:"0 0 8px"}}>🔑 Cambiar mi código</h3>
+            <h3 style={{color:C.blue,margin:"0 0 8px",fontWeight:600,letterSpacing:"-0.1px"}}>🔑 Cambiar mi código</h3>
             <p style={{color:C.muted,fontSize:13,marginBottom:16}}>Elegí un código nuevo de 4 dígitos.</p>
             <div style={{marginBottom:10}}>
               <label style={{color:C.muted,fontSize:12}}>Código nuevo</label>
@@ -85,7 +85,7 @@ export function CambiarPinModal({onClose}){
             <div style={{display:"flex",gap:10}}>
               <button onClick={onClose} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
               <button onClick={guardar} disabled={guardando||pin.length!==4||pin2.length!==4}
-                style={{background:guardando?C.border:C.blue,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:guardando?"default":"pointer",fontWeight:600}}>
+                style={{background:guardando?C.border:C.blue,color:"#fff",border:"none",borderRadius:12,padding:10,flex:1,cursor:guardando?"default":"pointer",fontWeight:600,boxShadow:guardando?"none":"0 1px 2px rgba(0,0,0,0.18)"}}>
                 {guardando?"Guardando...":"Guardar"}
               </button>
             </div>
@@ -100,11 +100,11 @@ export function ConfirmModal({title, message, onConfirm, onCancel}){
   return (
     <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
       <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:380,width:"100%",boxShadow:"0 10px 40px #0003"}}>
-        <h3 style={{color:C.danger,margin:"0 0 8px"}}>{title}</h3>
+        <h3 style={{color:C.danger,margin:"0 0 8px",fontWeight:600,letterSpacing:"-0.1px"}}>{title}</h3>
         <p style={{color:C.text,fontSize:14,marginBottom:20}}>{message}</p>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onCancel} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
-          <button onClick={onConfirm} style={{background:C.danger,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:"pointer",fontWeight:600}}>Eliminar</button>
+          <button onClick={onConfirm} style={{background:C.danger,color:"#fff",border:"none",borderRadius:12,padding:10,flex:1,cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Eliminar</button>
         </div>
       </div>
     </div>
@@ -131,13 +131,13 @@ export function DestinatariosManager({project, destinatarios, onSave, onClose}){
   return (
     <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
       <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:420,width:"100%",boxShadow:"0 10px 40px #0003"}}>
-        <h3 style={{color:C.blue,margin:"0 0 4px"}}>📧 Destinatarios</h3>
+        <h3 style={{color:C.blue,margin:"0 0 4px",fontWeight:600,letterSpacing:"-0.1px"}}>📧 Destinatarios</h3>
         <div style={{color:C.muted,fontSize:13,marginBottom:16}}>Para: <b style={{color:C.blue}}>{project}</b></div>
         <div style={{display:"flex",gap:8,marginBottom:12}}>
           <input style={INP} placeholder="correo@ejemplo.com" value={nuevo}
             onChange={e=>setNuevo(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&add()}/>
-          <button onClick={add} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:"0 16px",cursor:"pointer",fontWeight:600}}>+</button>
+          <button onClick={add} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"0 16px",cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>+</button>
         </div>
         <div style={{maxHeight:200,overflowY:"auto",marginBottom:16}}>
           {emails.length===0&&<div style={{color:C.muted,fontSize:13,textAlign:"center",padding:12}}>Sin destinatarios aún</div>}
@@ -150,7 +150,7 @@ export function DestinatariosManager({project, destinatarios, onSave, onClose}){
         </div>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onClose} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
-          <button onClick={save} style={{background:C.green,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:"pointer",fontWeight:600}}>Guardar</button>
+          <button onClick={save} style={{background:C.green,color:"#fff",border:"none",borderRadius:12,padding:10,flex:1,cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Guardar</button>
         </div>
       </div>
     </div>

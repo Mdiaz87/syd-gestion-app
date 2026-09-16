@@ -14,8 +14,8 @@ export const C = {
   warn:    "#f5a623",
 };
 
-export const INP = {background:C.bgCard2,border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"8px 10px",width:"100%",fontSize:13,boxSizing:"border-box"};
-export const BTN_SM = {background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12};
+export const INP = {background:C.bgCard2,border:`1px solid ${C.border}`,color:C.text,borderRadius:10,padding:"8px 10px",width:"100%",fontSize:13,boxSizing:"border-box"};
+export const BTN_SM = {background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:9,padding:"4px 10px",cursor:"pointer",fontSize:12};
 export const SEM_COLOR = {verde:C.green,amarillo:C.warn,rojo:C.danger};
 export const SEM_LABEL = {verde:"✅ En control",amarillo:"⚠️ Alerta",rojo:"🔴 Crítico"};
 

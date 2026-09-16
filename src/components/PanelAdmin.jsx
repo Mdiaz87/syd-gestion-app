@@ -48,7 +48,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <h2 style={{color:C.blue,margin:0,fontWeight:800}}>👥 Equipo</h2>
-        <button onClick={()=>setShowAdd(true)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontWeight:600,fontSize:13}}>+ Agregar persona</button>
+        <button onClick={()=>setShowAdd(true)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"8px 18px",cursor:"pointer",fontWeight:600,fontSize:13,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>+ Agregar persona</button>
       </div>
       <div style={{color:C.muted,fontSize:12,marginBottom:16}}>
         Cada persona cambia su propio código desde su sesión ("Cambiar mi código", arriba a la derecha).
@@ -83,7 +83,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
           <div style={{display:"flex",gap:10}}>
             <button onClick={()=>{setShowAdd(false);setAddNombre("");}} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
             <button onClick={addUser} disabled={!addNombre.trim()}
-              style={{background:addNombre.trim()?C.blue:C.border,color:"#fff",border:"none",borderRadius:8,padding:10,flex:1,cursor:addNombre.trim()?"pointer":"not-allowed",fontWeight:600}}>Agregar</button>
+              style={{background:addNombre.trim()?C.blue:C.border,color:"#fff",border:"none",borderRadius:12,padding:10,flex:1,cursor:addNombre.trim()?"pointer":"not-allowed",fontWeight:600,boxShadow:addNombre.trim()?"0 1px 2px rgba(0,0,0,0.18)":"none"}}>Agregar</button>
           </div>
         </Card>
       )}
@@ -100,7 +100,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                 </div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>setEditando(null)} style={{...BTN_SM,flex:1,padding:8}}>Cancelar</button>
-                  <button onClick={()=>saveEdit(u)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:8,flex:1,cursor:"pointer",fontWeight:600}}>Guardar</button>
+                  <button onClick={()=>saveEdit(u)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:8,flex:1,cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Guardar</button>
                 </div>
               </div>
             ):(
@@ -109,7 +109,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                   <span style={{color:C.text,fontWeight:600,fontSize:14}}>{u.nombre}</span>
                   {!u.activo&&<span style={{color:C.muted,fontSize:12,marginLeft:8}}>(inactivo)</span>}
                   <div style={{marginTop:4}}>
-                    <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{u.rol}</span>
+                    <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px"}}>{u.rol}</span>
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>

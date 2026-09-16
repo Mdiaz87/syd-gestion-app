@@ -144,7 +144,7 @@ export default function App(){
 
   if(loading) return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:C.muted,fontFamily:"'Segoe UI',Arial,sans-serif"}}>Cargando...</div>
+      <div style={{color:C.muted}}>Cargando...</div>
     </div>
   );
 
@@ -167,7 +167,7 @@ export default function App(){
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text}}>
+    <div style={{minHeight:"100vh",background:C.bg,color:C.text}}>
       <div style={{background:C.bgCard,borderBottom:`1px solid ${C.border}`,padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 1px 6px #1b3a6b0e"}}>
         <SydLogo size={30}/>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -229,7 +229,7 @@ export default function App(){
                 <div style={{color:C.danger,fontWeight:700,fontSize:14}}>⚠️ Error al cargar los informes</div>
                 <div style={{color:C.text,fontSize:13,marginTop:2}}>No se pudo conectar con la base de datos. Verifica tu internet e intenta de nuevo.</div>
               </div>
-              <button onClick={cargarTodo} style={{background:C.danger,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",cursor:"pointer",fontWeight:700,fontSize:13,whiteSpace:"nowrap"}}>
+              <button onClick={cargarTodo} style={{background:C.danger,color:"#fff",border:"none",borderRadius:12,padding:"10px 20px",cursor:"pointer",fontWeight:700,fontSize:13,whiteSpace:"nowrap",boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>
                 🔄 Reintentar
               </button>
             </div>
@@ -250,7 +250,7 @@ export default function App(){
                 ))}
               </div>
               <button onClick={recuperarLocales} disabled={importando}
-                style={{background:importando?C.border:C.warn,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",cursor:importando?"default":"pointer",fontWeight:700,fontSize:14}}>
+                style={{background:importando?C.border:C.warn,color:"#fff",border:"none",borderRadius:12,padding:"10px 20px",cursor:importando?"default":"pointer",fontWeight:700,fontSize:14,boxShadow:importando?"none":"0 1px 2px rgba(0,0,0,0.18)"}}>
                 {importando?"Recuperando...":"📤 Recuperar informes en este dispositivo"}
               </button>
             </div>
@@ -259,7 +259,7 @@ export default function App(){
             <h2 style={{color:C.blue,margin:0,fontWeight:800}}>Informes</h2>
             {reports.length>0&&(
               <button onClick={()=>exportarJSON(reports)}
-                style={{background:C.blue,color:"#fff",border:"none",borderRadius:10,padding:"10px 18px",cursor:"pointer",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:8,boxShadow:`0 2px 8px ${C.blue}44`}}>
+                style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"10px 18px",cursor:"pointer",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",gap:8,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>
                 📥 Exportar respaldo completo
               </button>
             )}
@@ -271,7 +271,7 @@ export default function App(){
           <div style={{background:C.danger+"12",border:`1px solid ${C.danger}`,borderRadius:10,padding:"14px 16px",marginBottom:16}}>
             <div style={{color:C.danger,fontWeight:700,fontSize:13,marginBottom:10}}>⚠️ Tienes un informe de la semana del {borradorAtrasado.semana} sin enviar. Debes enviarlo (aunque sea tarde) o descartarlo antes de crear uno nuevo.</div>
             <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setEditingReport(borradorAtrasado)} style={{background:C.blue,color:"#fff",fontWeight:700,border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,cursor:"pointer"}}>Continuar y enviar ese</button>
+              <button onClick={()=>setEditingReport(borradorAtrasado)} style={{background:C.blue,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:"9px 16px",fontSize:13,cursor:"pointer",boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Continuar y enviar ese</button>
               <button onClick={()=>setDeletingReport(borradorAtrasado)} style={{background:"none",color:C.danger,fontWeight:700,border:`1px solid ${C.danger}`,borderRadius:8,padding:"9px 16px",fontSize:13,cursor:"pointer"}}>Descartar ese informe</button>
             </div>
           </div>

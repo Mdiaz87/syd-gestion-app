@@ -13,7 +13,7 @@ export function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
     <div>
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         {onBack&&<button onClick={onBack} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"6px 14px",cursor:"pointer"}}>← Volver</button>}
-        <button onClick={()=>verImprimirInforme(report)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🖨️ Ver / Exportar PDF</button>
+        <button onClick={()=>verImprimirInforme(report)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>🖨️ Ver / Exportar PDF</button>
         {onEdit&&puedeGestionar(report,usuario)&&<button onClick={()=>onEdit(report)} style={{background:"none",border:`1px solid ${C.blueMid}`,color:C.blueMid,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>✏️ Editar</button>}
         {onDelete&&puedeGestionar(report,usuario)&&<button onClick={()=>onDelete(report)} style={{background:"none",border:`1px solid ${C.danger}`,color:C.danger,borderRadius:8,padding:"6px 16px",cursor:"pointer",fontWeight:600,fontSize:13}}>🗑️ Eliminar</button>}
       </div>
@@ -230,7 +230,7 @@ export function ReportDetail({report,onBack,usuario,onEdit,onDelete}){
             <Card style={{marginTop:10,background:C.bgCard2,border:`1px solid ${C.warn}44`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <SectionTitle color={C.warn}>📋 Auditoría del Informe</SectionTitle>
-                {ediciones.length>0&&<span style={{background:C.warn+"22",color:C.warn,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:700,border:`1px solid ${C.warn}55`}}>Editado {ediciones.length} {ediciones.length===1?"vez":"veces"}</span>}
+                {ediciones.length>0&&<span style={{background:C.warn+"22",color:C.warn,borderRadius:20,padding:"2px 12px",fontSize:11,fontWeight:600,letterSpacing:"0.1px"}}>Editado {ediciones.length} {ediciones.length===1?"vez":"veces"}</span>}
               </div>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
