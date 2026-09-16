@@ -20,7 +20,7 @@ export const SEM_COLOR = {verde:C.green,amarillo:C.warn,rojo:C.danger};
 export const SEM_LABEL = {verde:"✅ En control",amarillo:"⚠️ Alerta",rojo:"🔴 Crítico"};
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
-export const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Aqqua 4","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa","Vivante Norte","Itai Equipos","Grupo Itai","SYD Inversiones"];
+export const PROJECTS = ["Citrino","Vivante Parque Residencial","Aqqua Club","Aqqua 4","Atalí Conjunto Campestre","Brisas del Lago 1","Brisas del Lago 2","Brisas de Baranoa","Icon Park","Itai Equipos","Grupo Itai","SYD Inversiones"];
 export const TEAM = {
   "Citrino":["Ósmar Álvarez","Ivan Pérez"],
   "Vivante Parque Residencial":["Felipe Zuluaga"],
@@ -30,7 +30,7 @@ export const TEAM = {
   "Brisas del Lago 1":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas del Lago 2":["Jorge Cañate","Camilo","Jorge Torres"],
   "Brisas de Baranoa":["Germán Mercado"],
-  "Vivante Norte":["Carmelo","Rafael Espinosa","Ivan Pérez"],
+  "Icon Park":["Carmelo","Rafael Espinosa","Ivan Pérez"],
 };
 export const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
 export const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
@@ -39,7 +39,7 @@ export const UNIDADES = ["m³","m²","ml","horas","viajes","días","und","Otro"]
 // Empresa -> Centro de Costo -> Categoria -> [Subcategorias] (Cuentas de Cobro, 19/08, desde DESPLEGABLE.xlsx).
 export const EMPRESAS_CENTROS_COSTO = {
   "SYD INVERSIONES": {
-    "VIVANTE NORTE": {
+    "ICON PARK": {
       "FORMULACION DE PROYECTOS": ["LICENCIAS - DESARROLLO", "ESTUDIOS VARIOS", "FORMULACION Y CREACION", "COMPRA DE TERRENOS", "OTROS"],
       "OBRAS Y URBANISMO": ["PORTERIA", "REDES ELECTRICAS", "REDES DE AGUA / HIDRAULICOS", "SISTEMA VIAL", "CERRAMIENTOS", "REDES DE GAS", "ESTRUCTURAS HIDRAULICAS/ HIDROLOGICO", "SALA DE VENTAS", "AMENIDADES", "MANTENIMIENTOS Y OTROS", "OTROS", "TRANSPORTE", "COMBUSTIBLES", "LIMPIEZA Y DESCAPOTE", "SEÑALIZACIONES", "ESTUDIOS"],
       "OPERATIVOS": ["SERVICIOS PUBLICOS", "PAPELERIA Y OTRO", "ASEO Y CAFETERIA", "MENSAJERIA", "MANTENIMIENTO Y SERVICIOS GENERALES", "DOTACION", "OTROS LABORAL", "VIATICOS", "COMPRAS VARIAS", "OTROS"],
@@ -321,7 +321,7 @@ export const FRENTES_POR_PROYECTO = {
     "Levantamiento Topográfico","Estudios Ambientales","Estudio Hidrológico y Diseño Hidráulico",
     "Diseño Arquitectónico","Diseño Eléctrico","Diseño de Vías"
   ],
-  "Vivante Norte": [
+  "Icon Park": [
     "Sistema Vial","Vías Externas","Limpieza y Descapote / Mantenimiento",
     "Redes de Agua","Red Eléctrica / Acometidas","Red de Gas Natural",
     "Estructuras Hidráulicas / Bordillos","Portería / Garita","Zonas Sociales",
