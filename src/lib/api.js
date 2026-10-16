@@ -49,9 +49,12 @@ export async function saveDestinatarios(project, emails){
 }
 
 // ── USUARIOS (Supabase Auth real — el PIN nunca se guarda en una tabla) ──────
+// null = falló la conexión (distinto de "no hay usuarios"), para que la
+// pantalla de login no diga "no hay usuarios configurados" ante un simple
+// corte de red.
 export async function loadUsuarios(){
   const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin,proyecto_asignado').order('nombre');
-  if(error){ console.error('Error cargando usuarios:', error); return []; }
+  if(error){ console.error('Error cargando usuarios:', error); return null; }
   return data || [];
 }
 // Arma el objeto de sesión (camelCase) a partir de una fila cruda de

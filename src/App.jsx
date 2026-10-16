@@ -27,6 +27,7 @@ export default function App(){
   const [deletingReport,setDeletingReport]=useState(null);
   const [success,setSuccess]=useState(null);
   const [loading,setLoading]=useState(true);
+  const [usuariosError,setUsuariosError]=useState(false);
   const [destinatarios,setDestinatarios]=useState({});
   const [showDest,setShowDest]=useState(false);
   const [destProject,setDestProject]=useState(PROJECTS[0]);
@@ -60,11 +61,17 @@ export default function App(){
   const cargarTodo=async()=>{
     setLoading(true);
     setLoadError(false);
-    const [r,d,u,pres,cc] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios(), loadAllPresupuestoProyecto(), loadCuentasCobro()]);
+    setUsuariosError(false);
+    const [r,d,u0,pres,cc] = await Promise.all([loadReports(), loadDestinatarios(), loadUsuarios(), loadAllPresupuestoProyecto(), loadCuentasCobro()]);
+    // loadUsuarios devuelve null ante un corte de red (distinto de "no hay
+    // usuarios"); se reintenta una vez antes de mostrar error, para no
+    // bloquear el login por un hueco de señal momentáneo.
+    const u = u0===null ? await loadUsuarios() : u0;
+    if(u===null) setUsuariosError(true);
     // Siempre restaurar usuarios y sesión aunque los informes fallen
-    setDestinatarios(d); setUsuarios(u); setPresupuestos(pres||[]); setCuentasCobro(cc||[]);
+    setDestinatarios(d); if(u!==null) setUsuarios(u); setPresupuestos(pres||[]); setCuentasCobro(cc||[]);
     const { data:{ session } } = await supabase.auth.getSession();
-    if(session){
+    if(session && u!==null){
       const v=u.find(x=>x.id===session.user.id&&x.activo);
       if(v) setUsuario(shapeUsuario(v));
     }
@@ -149,7 +156,7 @@ export default function App(){
   );
 
   if(!usuario) return (
-    <LoginScreen usuarios={usuarios} onLogin={u=>{
+    <LoginScreen usuarios={usuarios} loadFailed={usuariosError} onRetry={cargarTodo} onLogin={u=>{
       setUsuario(u);
       setTab(u.rol==="Directivo"?"dashboard":"nuevo");
       cargarTodo();

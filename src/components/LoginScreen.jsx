@@ -9,7 +9,7 @@ const formatoEspera = (segs) => {
 };
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
-export function LoginScreen({usuarios, onLogin}){
+export function LoginScreen({usuarios, loadFailed, onRetry, onLogin}){
   const activos = usuarios.filter(u=>u.activo);
   const nombreCount = {};
   activos.forEach(u=>{ const p=u.nombre.split(" ")[0]; nombreCount[p]=(nombreCount[p]||0)+1; });
@@ -43,7 +43,14 @@ export function LoginScreen({usuarios, onLogin}){
       <div style={{display:"flex",justifyContent:"center",marginBottom:6}}><SydLogo size={34}/></div>
       <div style={{color:C.muted,fontSize:12,letterSpacing:2,textTransform:"uppercase",textAlign:"center",marginBottom:6}}>Sistema de Gestión de Proyectos</div>
       <div style={{width:50,height:3,background:`linear-gradient(90deg,${C.blue},${C.yellow},${C.green})`,borderRadius:2,margin:"0 auto 28px"}}/>
-      {activos.length===0?(
+      {activos.length===0&&loadFailed?(
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:12}}>📡</div>
+          <p style={{color:C.text,fontWeight:600,marginBottom:8}}>No se pudo conectar</p>
+          <p style={{color:C.muted,fontSize:13,marginBottom:20}}>Revisa tu conexión a internet e intenta de nuevo.</p>
+          <button onClick={onRetry} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:"10px 24px",cursor:"pointer",fontWeight:600,fontSize:14,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>🔄 Reintentar</button>
+        </div>
+      ):activos.length===0?(
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:32,marginBottom:12}}>⚠️</div>
           <p style={{color:C.text,fontWeight:600,marginBottom:8}}>No hay usuarios configurados</p>
