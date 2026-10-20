@@ -10,6 +10,7 @@ import { IngForm } from "./components/IngForm.jsx";
 import { ReportDetail } from "./components/ReportDetail.jsx";
 import { ReportsTable } from "./components/ReportsTable.jsx";
 import { Dashboard } from "./components/Dashboard.jsx";
+import { ResumenAyer } from "./components/ResumenAyer.jsx";
 import { ConsultasPanel } from "./components/ConsultasPanel.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
 import { PanelAdmin } from "./components/PanelAdmin.jsx";
@@ -37,6 +38,9 @@ export default function App(){
   const [presupuestos,setPresupuestos]=useState([]);
   const [cuentasCobro,setCuentasCobro]=useState([]);
   const [showCambiarPin,setShowCambiarPin]=useState(false);
+  // true solo si entró con su PIN en esta carga: ese clic habilita la voz del
+  // navegador; tras un recargar con sesión guardada queda el botón ▶️.
+  const [recienEntro,setRecienEntro]=useState(false);
 
   // Un Coordinador solo puede tener UN informe "en proceso" a la vez — si
   // dejó un borrador de una semana anterior sin enviar, hay que resolverlo
@@ -158,6 +162,7 @@ export default function App(){
   if(!usuario) return (
     <LoginScreen usuarios={usuarios} loadFailed={usuariosError} onRetry={cargarTodo} onLogin={u=>{
       setUsuario(u);
+      setRecienEntro(true);
       setTab(u.rol==="Directivo"?"dashboard":"nuevo");
       cargarTodo();
     }}/>
@@ -227,6 +232,7 @@ export default function App(){
             )}
           </div>
         )}
+        {tab==="dashboard"&&usuario.rol==="Directivo"&&<ResumenAyer reports={reports} proyectosVisibles={proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
         {tab==="dashboard"&&<Dashboard reports={reports} presupuestos={presupuestos} usuario={usuario}/>}
       {tab==="informes"&&(
         <div>
