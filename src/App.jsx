@@ -295,6 +295,7 @@ export default function App(){
             : <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.warn,fontWeight:600,fontSize:13}}>📌 Recordatorio: aún no envías el informe semanal. No olvides enviarlo antes de que termine la semana.</div>
         )}
         {tab==="nuevo"&&usuario.rol==="Coordinador"&&(!borradorAtrasado||editingReport)&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&!editingReport&&<ResumenAyer reports={reports} proyectosVisibles={proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
           <div>

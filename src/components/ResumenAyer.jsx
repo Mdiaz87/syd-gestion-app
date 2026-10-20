@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { C, BTN_SM } from "../lib/constants.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
-// ── RESUMEN DEL ÚLTIMO DÍA REPORTADO (Directivo) ───────────────────────────────
-// Al entrar, el Directivo escucha lo que los coordinadores registraron el día
+// ── RESUMEN DEL ÚLTIMO DÍA REPORTADO (Directivo e Ingeniero) ────────────────────────────
+// Al entrar, el Directivo (en el Dashboard) o el Ingeniero (en Nuevo Informe,
+// solo sus proyectos asignados) escucha lo que los coordinadores registraron el día
 // anterior (o el último día con registros, ej. el sábado si hoy es lunes).
 // Texto armado por plantilla con los datos tal cual; voz del navegador.
 
