@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, marcarPagoRealizado, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, marcarPagoRealizado, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -38,6 +38,30 @@ const fechaPagoDe = (cuenta) =>
   [...(cuenta.historial || [])].reverse().find(h => h.accion === "Marcado como pagado")?.fecha || null;
 
 const fechaCorta = (iso) => iso ? new Date(iso).toLocaleDateString("es-CO") : "—";
+// fecha_limite es tipo date ("2026-10-20"): sin hora, new Date() la toma en UTC
+// y en Colombia se mostraría un día antes.
+const fechaDia = (d) => d ? new Date(`${d}T00:00:00`).toLocaleDateString("es-CO") : "—";
+
+// Legalizaciones pendientes del usuario según los avisos de Recaudo y Cartera
+// (tabla legalizaciones_alertas_externas, una fila por cuenta y evento).
+// "bloqueada" pesa más que "por_vencer"; deja de contar en cuanto la cuenta
+// tiene factura de legalización (esa misma subida avisa a la otra app).
+const legalizacionesPendientesDe = (alertas, cuentas, usuario) => {
+  const porCuenta = new Map();
+  for (const a of alertas) {
+    const ref = String(a.referencia_externa ?? "");
+    if (!ref) continue;
+    const previa = porCuenta.get(ref);
+    if (!previa || (a.evento === "bloqueada" && previa.evento !== "bloqueada")) porCuenta.set(ref, a);
+  }
+  const res = [];
+  for (const c of cuentas) {
+    const a = porCuenta.get(String(c.id));
+    if (!a || c.autor_id !== usuario.id || c.factura_legalizacion_url) continue;
+    res.push({ cuenta: c, evento: a.evento, fechaLimite: a.fecha_limite });
+  }
+  return res;
+};
 
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 // Empresa -> Centro de Costo -> Categoría -> Subcategoría (todos en cascada;
@@ -46,7 +70,8 @@ const centrosDe = (empresa) => Object.keys(EMPRESAS_CENTROS_COSTO[empresa] || {}
 const categoriasDe = (empresa, cc) => Object.keys((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {});
 const subcategoriasDe = (empresa, cc, cat) => ((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {})[cat] || [];
 
-function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
+function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloqueadas = [] }) {
+  const bloqueado = !editando && bloqueadas.length > 0;
   const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado?.[0] || PROJECTS[0]);
   const empresaInicial = editando?.empresa || EMPRESAS[0];
@@ -128,6 +153,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
 
   const submit = async () => {
     setError("");
+    if (bloqueado) { setError("⚠️ Tienes legalizaciones vencidas. Sube la factura de legalización pendiente antes de radicar una nueva cuenta de cobro."); return; }
     const conceptoFinal = concepto === "Otro" ? conceptoOtro.trim() : concepto;
     const unidadFinal = unidad === "Otro" ? unidadOtro.trim() : unidad;
     if (!empresa) { setError("⚠️ Elige la empresa que va a realizar el pago."); return; }
@@ -184,6 +210,16 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
   return (
     <Card style={{ marginBottom: 20, border: editando ? `1px solid ${C.blueMid}` : undefined }}>
       <SectionTitle>{editando ? "Editar Cuenta de Cobro" : "Nueva Cuenta de Cobro"}</SectionTitle>
+      {bloqueado && (
+        <div style={{ background: C.danger + "12", border: `1px solid ${C.danger}`, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 13 }}>
+          🔒 No puedes radicar nuevas cuentas de cobro mientras tengas legalizaciones vencidas. Sube la factura de legalización (botón 📄 Factura en la tabla) de:
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {bloqueadas.map(({ cuenta, fechaLimite }) => (
+              <li key={cuenta.id}><b>{cuenta.project}</b> — {cuenta.proveedor} ({fmt(cuenta.valor)}){fechaLimite ? `, venció el ${fechaDia(fechaLimite)}` : ""}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {editando?.estado === "devuelto" && (
         <div style={{ background: C.danger + "12", border: `1px solid ${C.danger}`, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 13 }}>
           🔄 Esta cuenta fue devuelta{editando.condicion ? <>: <b>{editando.condicion}</b></> : "."} Corrige lo necesario y guarda para reenviarla.
@@ -292,7 +328,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion }) {
       {enviado && <div style={{ background: C.green + "18", border: `1px solid ${C.green}`, borderRadius: 8, padding: 10, marginBottom: 12, color: C.green, fontWeight: 600, textAlign: "center" }}>✅ Cuenta de cobro registrada — queda pendiente de aprobación</div>}
       <div style={{ display: "flex", gap: 10 }}>
         {editando && <button onClick={onCancelarEdicion} style={{ ...BTN_SM, flex: 1, padding: 13 }}>Cancelar</button>}
-        <button onClick={submit} disabled={enviando} style={{ flex: editando ? 2 : 1, background: enviando ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 12, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer", boxShadow: enviando ? "none" : "0 1px 2px rgba(0,0,0,0.18)" }}>
+        <button onClick={submit} disabled={enviando || bloqueado} style={{ flex: editando ? 2 : 1, background: (enviando || bloqueado) ? C.border : C.blue, color: "#fff", fontWeight: 700, border: "none", borderRadius: 12, padding: 13, fontSize: 15, cursor: enviando ? "default" : "pointer", boxShadow: enviando ? "none" : "0 1px 2px rgba(0,0,0,0.18)" }}>
           {enviando ? "Guardando..." : editando ? (editando.estado === "devuelto" ? "Guardar y reenviar" : "Guardar cambios") : "Registrar cuenta de cobro"}
         </button>
       </div>
@@ -457,6 +493,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [editando, setEditando] = useState(null);
   const [facturando, setFacturando] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [alertasLegalizacion, setAlertasLegalizacion] = useState([]);
+  useEffect(() => { loadAlertasLegalizacion().then(setAlertasLegalizacion); }, [cuentas]);
+  const legalizacionesPendientes = useMemo(() => legalizacionesPendientesDe(alertasLegalizacion, cuentas, usuario), [alertasLegalizacion, cuentas, usuario]);
+  const legalizacionesBloqueadas = legalizacionesPendientes.filter(p => p.evento === "bloqueada");
+  const legalizacionesPorVencer = legalizacionesPendientes.filter(p => p.evento === "por_vencer");
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
@@ -555,7 +596,17 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
       {editando ? (
         <CuentaForm key={editando.id} usuario={usuario} editando={editando} onGuardada={onGuardadaEdicion} onCancelarEdicion={() => setEditando(null)} />
       ) : (usuario.rol === "Ingeniero" || usuario.rol === "Directivo") && (
-        <CuentaForm key="nueva" usuario={usuario} onGuardada={onRefresh} />
+        <CuentaForm key="nueva" usuario={usuario} onGuardada={onRefresh} bloqueadas={legalizacionesBloqueadas} />
+      )}
+      {!editando && legalizacionesPorVencer.length > 0 && (
+        <div style={{ background: C.warn + "18", border: `1px solid ${C.warn}`, borderRadius: 8, padding: 10, marginBottom: 20, fontSize: 13 }}>
+          ⏳ Tienes legalizaciones por vencer. Sube la factura antes de la fecha límite o se bloqueará la radicación de nuevas cuentas:
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {legalizacionesPorVencer.map(({ cuenta, fechaLimite }) => (
+              <li key={cuenta.id}><b>{cuenta.project}</b> — {cuenta.proveedor} ({fmt(cuenta.valor)}){fechaLimite ? `, vence el ${fechaDia(fechaLimite)}` : ""}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}

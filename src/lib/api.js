@@ -309,6 +309,15 @@ export async function enviarRevisionContable(cuentaId){
   return !!data?.ok;
 }
 
+// Avisos que manda la app de Recaudo y Cartera (cron-legalizaciones) cuando
+// una cuenta ya pagada está por vencer o venció sin factura de legalización.
+// referencia_externa = cuentas_cobro.id (tal cual se mandó en legalizar-pago).
+export async function loadAlertasLegalizacion(){
+  const { data, error } = await supabase.from('legalizaciones_alertas_externas').select('referencia_externa,evento,fecha_limite,dias_restantes').not('referencia_externa','is',null);
+  if(error){ console.error('Error cargando alertas de legalización:', error); return []; }
+  return data || [];
+}
+
 export async function loadProveedores(){
   const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
   if(error){ console.error('Error cargando proveedores:', error); return []; }
