@@ -7,6 +7,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //
 // Se desplegó desde el Dashboard con el nombre "dynamic-function"; se deja
 // así para no romper la URL que llama cron-legalizaciones.
+// Desplegar SIEMPRE con --no-verify-jwt (igual que revision-contable-callback):
+// la autenticación es el x-webhook-secret, no un JWT de este proyecto.
 Deno.serve(async (req) => {
   try {
     const secret = req.headers.get("x-webhook-secret");
