@@ -225,6 +225,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
           🔄 Esta cuenta fue devuelta{editando.condicion ? <>: <b>{editando.condicion}</b></> : "."} Corrige lo necesario y guarda para reenviarla.
         </div>
       )}
+      {/* Con legalizaciones vencidas el formulario entero queda inactivo, no solo el botón. */}
+      <fieldset disabled={bloqueado} style={{ border: "none", margin: 0, padding: 0, minWidth: 0, opacity: bloqueado ? 0.5 : 1 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Proyecto</label>
@@ -324,6 +326,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
         <label style={{ color: C.muted, fontSize: 12 }}>Observaciones (opcional)</label>
         <textarea style={{ ...INP, minHeight: 60 }} value={observaciones} onChange={e => setObservaciones(e.target.value)} />
       </div>
+      </fieldset>
       {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {enviado && <div style={{ background: C.green + "18", border: `1px solid ${C.green}`, borderRadius: 8, padding: 10, marginBottom: 12, color: C.green, fontWeight: 600, textAlign: "center" }}>✅ Cuenta de cobro registrada — queda pendiente de aprobación</div>}
       <div style={{ display: "flex", gap: 10 }}>
@@ -593,11 +596,6 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     <div>
       <h2 style={{ color: C.blue, marginBottom: 20, fontWeight: 800 }}>💳 Cuentas de Cobro</h2>
 
-      {editando ? (
-        <CuentaForm key={editando.id} usuario={usuario} editando={editando} onGuardada={onGuardadaEdicion} onCancelarEdicion={() => setEditando(null)} />
-      ) : (usuario.rol === "Ingeniero" || usuario.rol === "Directivo") && (
-        <CuentaForm key="nueva" usuario={usuario} onGuardada={onRefresh} bloqueadas={legalizacionesBloqueadas} />
-      )}
       {!editando && legalizacionesPorVencer.length > 0 && (
         <div style={{ background: C.warn + "18", border: `1px solid ${C.warn}`, borderRadius: 8, padding: 10, marginBottom: 20, fontSize: 13 }}>
           ⏳ Tienes legalizaciones por vencer. Sube la factura antes de la fecha límite o se bloqueará la radicación de nuevas cuentas:
@@ -607,6 +605,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
             ))}
           </ul>
         </div>
+      )}
+      {editando ? (
+        <CuentaForm key={editando.id} usuario={usuario} editando={editando} onGuardada={onGuardadaEdicion} onCancelarEdicion={() => setEditando(null)} />
+      ) : (usuario.rol === "Ingeniero" || usuario.rol === "Directivo") && (
+        <CuentaForm key="nueva" usuario={usuario} onGuardada={onRefresh} bloqueadas={legalizacionesBloqueadas} />
       )}
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}
