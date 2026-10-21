@@ -294,8 +294,9 @@ export async function aprobarCuentaPorPagar(cuentaId){
 // Sube la factura definitiva de legalización (llega DESPUÉS del pago, la
 // entrega el proveedor — distinta del soporte inicial) y la asocia al
 // registro correcto en la app de contabilidad vía referenciaExterna.
-export async function enviarFacturaLegalizacion(cuentaId, facturaUrl){
-  const { data, error } = await supabase.functions.invoke('enviar-factura-legalizacion', { body: { cuentaId, facturaUrl } });
+// facturas: [{nombre, url}] — puede ser la factura más sus anexos.
+export async function enviarFacturaLegalizacion(cuentaId, facturas){
+  const { data, error } = await supabase.functions.invoke('enviar-factura-legalizacion', { body: { cuentaId, facturas } });
   if(error){ console.error('Error invocando enviar-factura-legalizacion:', error); return false; }
   return !!data?.ok;
 }
