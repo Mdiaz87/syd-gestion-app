@@ -1,4 +1,18 @@
+import { supabase } from "../supabase.js";
+
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1y7NpivZ5fRbbMtXapUq8msY63OM8knVsxsIF1_8fm_307mcqFDQt-jYwGmPYopfN/exec";
+
+// Toda llamada al Apps Script lleva el token de la sesión: el script lo
+// valida contra Supabase antes de hacer nada (la URL es pública, está en el
+// código de la app).
+async function postGAS(payload){
+  const { data:{ session } } = await supabase.auth.getSession();
+  return fetch(GAS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ ...payload, accessToken: session?.access_token || null }),
+  });
+}
 
 // ── GENERADOR HTML PARA DRIVE / IMPRESIÓN ─────────────────────────────────────
 export function generarHTMLInforme(report, soloContenido=false){
@@ -151,11 +165,7 @@ export async function enviarADrive(report, destinatarios=[]){
       : `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
     const isEdit = report.estado==="enviado" && (report.history||[]).some(h=>h.accion==="Editado");
 
-    const res = await fetch(GAS_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({pdfBase64, fileName, project:report.project, type:report.type, isEdit, destinatarios, author:report.author})
-    });
+    const res = await postGAS({pdfBase64, fileName, project:report.project, type:report.type, isEdit, destinatarios, author:report.author});
     const resultado = await res.json();
     if(resultado.error){ console.error("Error del lado de Drive:", resultado.error); return false; }
     return !!resultado.ok;
@@ -167,11 +177,7 @@ export async function enviarADrive(report, destinatarios=[]){
 
 export async function enviarAlertaPresupuesto({project, categoria, presupuesto, ejecutado, pct, umbral, destinatarios}){
   try{
-    const res = await fetch(GAS_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({tipoAlerta:'presupuesto', project, categoria, presupuesto, ejecutado, pct, umbral, destinatarios})
-    });
+    const res = await postGAS({tipoAlerta:'presupuesto', project, categoria, presupuesto, ejecutado, pct, umbral, destinatarios});
     const resultado = await res.json();
     return !!resultado.ok;
   }catch(e){
@@ -185,11 +191,7 @@ export async function enviarAlertaPresupuesto({project, categoria, presupuesto, 
 // usamos para los informes. Devuelve el link resultante o null si falla.
 export async function subirSoporteCuentaCobro({project, fileName, base64}){
   try{
-    const res = await fetch(GAS_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({tipoAlerta:'soporte_cobro', project, fileName, base64})
-    });
+    const res = await postGAS({tipoAlerta:'soporte_cobro', project, fileName, base64});
     const resultado = await res.json();
     if(resultado.error){ console.error("Error subiendo soporte:", resultado.error); return null; }
     return resultado.url || null;
@@ -201,11 +203,7 @@ export async function subirSoporteCuentaCobro({project, fileName, base64}){
 
 export async function enviarNotificacionPago({project, proveedor, concepto, cantidad, unidad, valor, estado, condicion, linkSoporte, destinatarios}){
   try{
-    const res = await fetch(GAS_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body: JSON.stringify({tipoAlerta:'pago', project, proveedor, concepto, cantidad, unidad, valor, estado, condicion, linkSoporte, destinatarios})
-    });
+    const res = await postGAS({tipoAlerta:'pago', project, proveedor, concepto, cantidad, unidad, valor, estado, condicion, linkSoporte, destinatarios});
     const resultado = await res.json();
     return !!resultado.ok;
   }catch(e){
