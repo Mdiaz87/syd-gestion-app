@@ -114,7 +114,14 @@ export default function App(){
     setImportando(false);
   };
 
-  const submit=async(r, wasEditing)=>{
+  const submit=async(r0, wasEditing)=>{
+    // El PDF a Drive + correo a destinatarios sale UNA vez, al enviar. Guardar
+    // borrador no manda nada; corregir un informe ya enviado manda un solo
+    // correo marcado "[Corrección]". (Antes cada guardado mandaba el correo.)
+    const anterior = reports.find(x=>x.id===r0.id);
+    const yaEnviado = !!(anterior?.correoEnviadoAt || (wasEditing && anterior?.estado!=="borrador"));
+    const motivo = r0.estado==="borrador" ? null : !yaEnviado ? "nuevo" : wasEditing ? "correccion" : null;
+    const r = motivo ? {...r0, correoEnviadoAt:new Date().toISOString()} : {...r0, correoEnviadoAt: anterior?.correoEnviadoAt || r0.correoEnviadoAt};
     const updated = wasEditing
       ? reports.map(x=>x.id===r.id?r:x)
       : [...reports,r];
@@ -122,9 +129,9 @@ export default function App(){
     const dest = destinatarios[r.project]||[];
     const [ok, driveOk] = await Promise.all([
       saveReport(r, wasEditing),
-      enviarADrive(r, dest)
+      motivo ? enviarADrive(r, dest, motivo) : Promise.resolve(true)
     ]);
-    setSuccess({report:r, dest, saveError: !ok, driveOk, wasEditing});
+    setSuccess({report:r, dest, saveError: !ok, driveOk, wasEditing, motivo});
     setEditingReport(null);
     setTimeout(()=>{ setSuccess(null); setTab("informes"); },6000);
   };
@@ -214,6 +221,13 @@ export default function App(){
                 <div style={{color:C.green,fontWeight:600,marginBottom:6}}>
                   ✅ {success.wasEditing?"Cambios guardados":"Informe guardado"} correctamente
                 </div>
+                {!success.motivo ? (
+                  <div style={{color:C.muted,fontSize:13}}>
+                    {success.report.estado==="borrador"
+                      ? "📝 Guardado como borrador. El PDF y el correo a los destinatarios salen cuando le des \"Enviar\"."
+                      : "Este informe ya se había enviado por correo; no se volvió a mandar."}
+                  </div>
+                ) : (<>
                 <div style={{color:C.text,fontSize:13,marginBottom:4}}>
                   ☁️ Google Drive: {success.driveOk
                     ? <span style={{color:C.green,fontWeight:600}}>✅ Copia guardada en Drive (SYD - Sistema de Gestión de Proyectos)</span>
@@ -230,6 +244,8 @@ export default function App(){
                 ):(
                   <div style={{color:C.warn,fontSize:13,marginTop:6}}>⚠️ Sin destinatarios configurados para {success.report.project} — nadie recibirá aviso por correo.</div>
                 )}
+                {success.motivo==="correccion"&&<div style={{color:C.muted,fontSize:12,marginTop:4}}>El correo salió marcado como [Corrección].</div>}
+                </>)}
               </>
             )}
           </div>

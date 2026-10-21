@@ -15,8 +15,10 @@ export function ReportsTable({reports,onSelect,onEdit,onDelete,usuario,destinata
   const [reenviando,setReenviando]=useState({});
 
   const reenviar=async(r)=>{
+    const dest=(destinatarios&&destinatarios[r.project])||[];
+    if(!window.confirm(`¿Reenviar el informe de ${r.project} por correo a ${dest.length} destinatario${dest.length===1?"":"s"}? Les llegará marcado como [Reenvío].`)) return;
     setReenviando(s=>({...s,[r.id]:"enviando"}));
-    const ok = await enviarADrive(r, (destinatarios&&destinatarios[r.project])||[]);
+    const ok = await enviarADrive(r, dest, "reenvio");
     setReenviando(s=>({...s,[r.id]:ok?"ok":"error"}));
     setTimeout(()=>setReenviando(s=>{const {[r.id]:_,...rest}=s; return rest;}),4000);
   };

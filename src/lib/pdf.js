@@ -121,7 +121,24 @@ export function generarHTMLInforme(report, soloContenido=false){
 </head><body>${cuerpo}</body></html>`;
 }
 
-export async function enviarADrive(report, destinatarios=[]){
+// Periodo legible para el asunto del correo: semana (por las fechas de los
+// días) en el semanal, mes en el mensual, fecha en los demás.
+const MESES_CORTOS=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+function periodoDe(report){
+  const fechas=(report.days||[]).map(d=>d.date).filter(Boolean).sort();
+  const base=fechas[0]||report.semana;
+  if(report.role==="Coordinador"&&base){
+    const ini=new Date(`${base}T00:00:00`); ini.setDate(ini.getDate()-((ini.getDay()+6)%7));
+    const fin=new Date(ini); fin.setDate(ini.getDate()+6);
+    const f=d=>`${d.getDate()} ${MESES_CORTOS[d.getMonth()]}`;
+    return `semana ${f(ini)}–${f(fin)} ${fin.getFullYear()}`;
+  }
+  if(report.type==="mensual"&&report.mes) return report.mes;
+  return report.date||"";
+}
+
+// motivo: "nuevo" | "correccion" | "reenvio" — el Apps Script lo pone en el asunto.
+export async function enviarADrive(report, destinatarios=[], motivo="nuevo"){
   try{
     // Importar primero para que el bundle esté listo antes de tocar el DOM
     const html2pdf = (await import('html2pdf.js')).default;
@@ -163,9 +180,9 @@ export async function enviarADrive(report, destinatarios=[]){
     const fileName = (report.role==="Coordinador"&&report.semana)
       ? `Informe_Semanal_${proy}_${report.semana}_${aut}.pdf`
       : `Informe_${proy}_${report.type}_${report.date}_${aut}.pdf`;
-    const isEdit = report.estado==="enviado" && (report.history||[]).some(h=>h.accion==="Editado");
+    const isEdit = motivo==="correccion";
 
-    const res = await postGAS({pdfBase64, fileName, project:report.project, type:report.type, isEdit, destinatarios, author:report.author});
+    const res = await postGAS({pdfBase64, fileName, project:report.project, type:report.type, isEdit, motivo, periodo:periodoDe(report), reportId:String(report.id), destinatarios, author:report.author});
     const resultado = await res.json();
     if(resultado.error){ console.error("Error del lado de Drive:", resultado.error); return false; }
     return !!resultado.ok;
