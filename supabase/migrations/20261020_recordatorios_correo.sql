@@ -7,3 +7,9 @@ alter table obligaciones_informes
 -- Para programar la Edge Function recordatorios-informes (cada 2 días).
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
+
+-- Programación (aplicada aparte para no versionar el secreto):
+--   select cron.schedule('recordatorios-informes', '0 12 */2 * *',  -- 7 a.m. Colombia, días impares
+--     $$ select net.http_post(url := 'https://oznvuehmlorpnutwigtm.supabase.co/functions/v1/recordatorios-informes',
+--          headers := jsonb_build_object('Content-Type','application/json','x-cron-secret','<RECORDATORIOS_CRON_SECRET>'),
+--          body := '{}'::jsonb, timeout_milliseconds := 60000); $$);
