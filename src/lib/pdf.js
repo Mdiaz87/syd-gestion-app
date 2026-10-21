@@ -1,4 +1,4 @@
-import { supabase } from "../supabase.js";
+import { supabase, SUPABASE_KEY } from "../supabase.js";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1y7NpivZ5fRbbMtXapUq8msY63OM8knVsxsIF1_8fm_307mcqFDQt-jYwGmPYopfN/exec";
 
@@ -10,7 +10,7 @@ async function postGAS(payload){
   return fetch(GAS_URL, {
     method:'POST',
     headers:{'Content-Type':'text/plain'},
-    body: JSON.stringify({ ...payload, accessToken: session?.access_token || null }),
+    body: JSON.stringify({ ...payload, accessToken: session?.access_token || null, apikey: SUPABASE_KEY }),
   });
 }
 
