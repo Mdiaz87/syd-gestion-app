@@ -4,7 +4,7 @@ import { C, PROJECTS } from "./lib/constants.js";
 import { getMondayStr, exportarJSON, puedeGestionar } from "./lib/helpers.js";
 import { loadReports, saveReport, deleteReport, loadDestinatarios, saveDestinatarios, loadUsuarios, loadAllPresupuestoProyecto, cambiarMiPin, loadCuentasCobro, shapeUsuario } from "./lib/api.js";
 import { enviarADrive } from "./lib/pdf.js";
-import { SydLogo, ConfirmModal, DestinatariosManager, CambiarPinModal } from "./components/ui.jsx";
+import { SydLogo, ConfirmModal, DestinatariosManager, CambiarPinModal, MiCorreoModal } from "./components/ui.jsx";
 import { CoordForm } from "./components/CoordForm.jsx";
 import { IngForm } from "./components/IngForm.jsx";
 import { ReportDetail } from "./components/ReportDetail.jsx";
@@ -38,6 +38,7 @@ export default function App(){
   const [presupuestos,setPresupuestos]=useState([]);
   const [cuentasCobro,setCuentasCobro]=useState([]);
   const [showCambiarPin,setShowCambiarPin]=useState(false);
+  const [showMiCorreo,setShowMiCorreo]=useState(false);
   // true solo si entró con su PIN en esta carga: ese clic habilita la voz del
   // navegador; tras un recargar con sesión guardada queda el botón ▶️.
   const [recienEntro,setRecienEntro]=useState(false);
@@ -187,6 +188,7 @@ export default function App(){
             <div style={{color:C.text,fontSize:13,fontWeight:600}}>{usuario.nombre}</div>
             <div style={{color:C.muted,fontSize:11}}>{usuario.rol}</div>
           </div>
+          <button onClick={()=>setShowMiCorreo(true)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>✉️ Mi correo</button>
           <button onClick={()=>setShowCambiarPin(true)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>🔑 Cambiar mi código</button>
           <button onClick={async()=>{await supabase.auth.signOut();setUsuario(null);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
         </div>
@@ -365,6 +367,9 @@ export default function App(){
       )}
       {showCambiarPin&&(
         <CambiarPinModal onClose={()=>setShowCambiarPin(false)}/>
+      )}
+      {showMiCorreo&&(
+        <MiCorreoModal usuario={usuario} onClose={()=>setShowMiCorreo(false)}/>
       )}
       {deletingReport&&(
         <ConfirmModal

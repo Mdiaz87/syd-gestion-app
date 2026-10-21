@@ -337,6 +337,10 @@ export async function loadContactosNotificacion(){
   if(error){ console.error('Error cargando correos:', error); return {}; }
   return Object.fromEntries((data||[]).map(c=>[c.profile_id, c.email]));
 }
+export async function loadMiCorreo(profileId){
+  const { data } = await supabase.from('contactos_notificacion').select('email').eq('profile_id', profileId).maybeSingle();
+  return data?.email || "";
+}
 export async function guardarContactoNotificacion(profileId, email){
   const limpio = (email||'').trim();
   const { error } = limpio

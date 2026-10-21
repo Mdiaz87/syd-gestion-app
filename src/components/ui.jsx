@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { C, INP, BTN_SM, SEM_COLOR, SEM_LABEL, ACTIVIDADES_CATALOGO, MACHINES, OPERADORES_OPTS, UNIDADES, ETAPAS } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { cambiarMiPin } from "../lib/api.js";
+import { cambiarMiPin, loadMiCorreo, guardarContactoNotificacion } from "../lib/api.js";
 
 // ── LOGO ──────────────────────────────────────────────────────────────────────
 export function SydLogo({size=44}){
@@ -43,6 +43,48 @@ export function SectionTitle({children,color}){
 }
 export function Card({children,style={},borderColor}){
   return <div style={{background:C.bgCard,borderRadius:16,padding:16,border:`1px solid ${borderColor||C.border}`,boxShadow:"0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06)",...style}}>{children}</div>;
+}
+
+// Cada persona registra su propio correo para recordatorios de informes.
+export function MiCorreoModal({usuario,onClose}){
+  const [correo,setCorreo]=useState("");
+  const [cargando,setCargando]=useState(true);
+  const [guardando,setGuardando]=useState(false);
+  const [error,setError]=useState("");
+  const [ok,setOk]=useState(false);
+  useEffect(()=>{ loadMiCorreo(usuario.id).then(c=>{setCorreo(c);setCargando(false);}); },[usuario.id]);
+  const guardar=async()=>{
+    const limpio=correo.trim();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(limpio)){ setError("Escribe un correo válido, ej. nombre@gmail.com"); return; }
+    setError(""); setGuardando(true);
+    const exito=await guardarContactoNotificacion(usuario.id,limpio);
+    setGuardando(false);
+    if(exito) setOk(true); else setError("No se pudo guardar. Intenta de nuevo.");
+  };
+  return (
+    <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
+      <div style={{background:C.bgCard,borderRadius:16,padding:24,maxWidth:380,width:"100%",boxShadow:"0 10px 40px #0003"}}>
+        {ok?(
+          <>
+            <h3 style={{color:C.green,margin:"0 0 8px",fontWeight:600}}>✅ Correo guardado</h3>
+            <p style={{color:C.text,fontSize:14,marginBottom:20}}>Te llegarán ahí los recordatorios cuando tengas un informe pendiente.</p>
+            <button onClick={onClose} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:10,width:"100%",cursor:"pointer",fontWeight:600}}>Entendido</button>
+          </>
+        ):(
+          <>
+            <h3 style={{color:C.blue,margin:"0 0 8px",fontWeight:600}}>✉️ Mi correo</h3>
+            <p style={{color:C.muted,fontSize:13,marginBottom:16}}>A este correo te llegarán los recordatorios cuando tengas un informe pendiente.</p>
+            <input type="email" style={INP} disabled={cargando} value={correo} placeholder={cargando?"Cargando...":"nombre@gmail.com"} onChange={e=>{setCorreo(e.target.value);setError("");}}/>
+            {error&&<div style={{color:C.danger,fontSize:13,margin:"8px 0 0"}}>{error}</div>}
+            <div style={{display:"flex",gap:10,marginTop:14}}>
+              <button onClick={onClose} style={{...BTN_SM,flex:1,padding:10}}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando||cargando} style={{background:guardando?C.border:C.blue,color:"#fff",border:"none",borderRadius:12,padding:10,flex:1,cursor:guardando?"default":"pointer",fontWeight:600}}>{guardando?"Guardando...":"Guardar"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function CambiarPinModal({onClose}){
