@@ -319,6 +319,33 @@ export async function loadAlertasLegalizacion(){
   return data || [];
 }
 
+// Qué informes debe entregar cada proyecto (recordatorios).
+export async function loadObligacionesInformes(){
+  const { data, error } = await supabase.from('obligaciones_informes').select('*').order('project');
+  if(error){ console.error('Error cargando obligaciones de informes:', error); return []; }
+  return data || [];
+}
+export async function guardarObligacionInforme(project, cambios){
+  const { error } = await supabase.from('obligaciones_informes').upsert({ project, ...cambios, updated_at: new Date().toISOString() });
+  if(error){ console.error('Error guardando obligación de informe:', error); return false; }
+  return true;
+}
+
+// Correos reales para recordatorios (tabla aparte de profiles, solo Directivos).
+export async function loadContactosNotificacion(){
+  const { data, error } = await supabase.from('contactos_notificacion').select('profile_id,email');
+  if(error){ console.error('Error cargando correos:', error); return {}; }
+  return Object.fromEntries((data||[]).map(c=>[c.profile_id, c.email]));
+}
+export async function guardarContactoNotificacion(profileId, email){
+  const limpio = (email||'').trim();
+  const { error } = limpio
+    ? await supabase.from('contactos_notificacion').upsert({ profile_id: profileId, email: limpio, updated_at: new Date().toISOString() })
+    : await supabase.from('contactos_notificacion').delete().eq('profile_id', profileId);
+  if(error){ console.error('Error guardando correo:', error); return false; }
+  return true;
+}
+
 export async function loadProveedores(){
   const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
   if(error){ console.error('Error cargando proveedores:', error); return []; }

@@ -2,13 +2,12 @@ import { ITEMS_PREOP, ITEMS_OP, TRAMITES } from "./constants.js";
 
 export const fmt = n => n ? new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(+n) : "-";
 
+// Lunes de esta semana en hora LOCAL. Antes usaba toISOString() (UTC): en
+// Colombia, después de las 7 p.m. la fecha se corría al día siguiente.
 export function getMondayStr(){
   const d=new Date();
-  const day=d.getDay();
-  const diff=day===0?-6:1-day;
-  const m=new Date(d);
-  m.setDate(d.getDate()+diff);
-  return m.toISOString().slice(0,10);
+  d.setDate(d.getDate()-((d.getDay()+6)%7));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
 export function semaforo(avObra,avRec,actP,actE,presup,ejec){

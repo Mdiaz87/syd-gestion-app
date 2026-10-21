@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
-import { crearUsuario, editarUsuario, setUsuarioActivo, resetearPinDeOtro } from "../lib/api.js";
+import { crearUsuario, editarUsuario, setUsuarioActivo, resetearPinDeOtro, loadContactosNotificacion, guardarContactoNotificacion, loadObligacionesInformes, guardarObligacionInforme } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
 // ── PANEL ADMIN ───────────────────────────────────────────────────────────────
@@ -13,12 +13,32 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
   const [addNombre,setAddNombre]=useState("");
   const [addRol,setAddRol]=useState("Coordinador");
   const [reseteando,setReseteando]=useState(null);
+  const [correos,setCorreos]=useState({});
+  const [editCorreo,setEditCorreo]=useState("");
+  const [obligaciones,setObligaciones]=useState([]);
+  useEffect(()=>{
+    loadContactosNotificacion().then(setCorreos);
+    loadObligacionesInformes().then(setObligaciones);
+  },[]);
 
-  const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);};
+  const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);setEditCorreo(correos[u.id]||"");};
   const saveEdit=async u=>{
+    const correo=editCorreo.trim();
+    if(correo&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)){ alert("⚠️ El correo no parece válido."); return; }
     const ok=await editarUsuario(u.id,editNombre,editRol);
     if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,nombre:editNombre,rol:editRol}:x));
+    if(correo!==(correos[u.id]||"")){
+      const okCorreo=await guardarContactoNotificacion(u.id,correo);
+      if(okCorreo) setCorreos(c=>{const n={...c}; if(correo) n[u.id]=correo; else delete n[u.id]; return n;});
+      else alert("⚠️ No se pudo guardar el correo.");
+    }
     setEditando(null);
+  };
+  const cambiarObligacion=async(o,cambios)=>{
+    const nueva={...o,...cambios};
+    setObligaciones(os=>os.map(x=>x.project===o.project?nueva:x));
+    const ok=await guardarObligacionInforme(o.project,{coord_semanal:nueva.coord_semanal,ing_mensual:nueva.ing_mensual,ing_mensual_desde:nueva.ing_mensual_desde||null});
+    if(!ok){ alert("⚠️ No se pudo guardar el cambio."); setObligaciones(os=>os.map(x=>x.project===o.project?o:x)); }
   };
   const toggleActivo=async u=>{
     const ok=await setUsuarioActivo(u.id,!u.activo);
@@ -98,6 +118,10 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                     {["Coordinador","Ingeniero","Directivo"].map(r=><option key={r}>{r}</option>)}
                   </select>
                 </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{color:C.muted,fontSize:12}}>Correo para recordatorios (opcional)</label>
+                  <input style={INP} type="email" value={editCorreo} onChange={e=>setEditCorreo(e.target.value)} placeholder="nombre@correo.com"/>
+                </div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>setEditando(null)} style={{...BTN_SM,flex:1,padding:8}}>Cancelar</button>
                   <button onClick={()=>saveEdit(u)} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,padding:8,flex:1,cursor:"pointer",fontWeight:600,boxShadow:"0 1px 2px rgba(0,0,0,0.18)"}}>Guardar</button>
@@ -108,6 +132,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                 <div>
                   <span style={{color:C.text,fontWeight:600,fontSize:14}}>{u.nombre}</span>
                   {!u.activo&&<span style={{color:C.muted,fontSize:12,marginLeft:8}}>(inactivo)</span>}
+                  <div style={{color:correos[u.id]?C.muted:C.warn,fontSize:12,marginTop:2}}>{correos[u.id]?`✉️ ${correos[u.id]}`:"✉️ Sin correo para recordatorios"}</div>
                   <div style={{marginTop:4}}>
                     <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px"}}>{u.rol}</span>
                   </div>
@@ -123,6 +148,31 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                 </div>
               </div>
             )}
+          </div>
+        ))}
+      </div>
+
+      <h3 style={{color:C.blue,margin:"28px 0 6px",fontWeight:800}}>📋 Informes obligatorios por proyecto</h3>
+      <div style={{color:C.muted,fontSize:12,marginBottom:12}}>
+        Solo los proyectos marcados generan recordatorios en el Dashboard y por correo. El semanal de Coordinador vence el lunes a las 12 m; el mensual de Ingeniero, el día 5 del mes siguiente. "Desde" es el primer mes que se exige (para proyectos nuevos).
+      </div>
+      <div style={{display:"grid",gap:6}}>
+        {obligaciones.map(o=>(
+          <div key={o.project} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontSize:13}}>
+            <span style={{fontWeight:600,color:C.text}}>{o.project}</span>
+            <span style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+              <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
+                <input type="checkbox" checked={o.coord_semanal} onChange={e=>cambiarObligacion(o,{coord_semanal:e.target.checked})}/> Semanal Coordinador
+              </label>
+              <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
+                <input type="checkbox" checked={o.ing_mensual} onChange={e=>cambiarObligacion(o,{ing_mensual:e.target.checked})}/> Mensual Ingeniero
+              </label>
+              {o.ing_mensual&&(
+                <label style={{display:"flex",gap:6,alignItems:"center",color:C.muted}}>
+                  desde <input type="month" value={o.ing_mensual_desde||""} onChange={e=>cambiarObligacion(o,{ing_mensual_desde:e.target.value||null})} style={{...INP,padding:"2px 6px",width:150}}/>
+                </label>
+              )}
+            </span>
           </div>
         ))}
       </div>

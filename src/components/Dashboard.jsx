@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip as RcTooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, MESES } from "../lib/constants.js";
-import { fmt, semaforo, getMondayStr } from "../lib/helpers.js";
+import { fmt, semaforo } from "../lib/helpers.js";
+import { calcularRecordatorios, lunesDe, etiquetaSemana } from "../lib/recordatorios.js";
+import { loadObligacionesInformes } from "../lib/api.js";
 import { Badge, Bar } from "./ui.jsx";
 
 export function Dashboard({reports,presupuestos,usuario}){
@@ -13,41 +15,11 @@ export function Dashboard({reports,presupuestos,usuario}){
   const byProj={};
   proyectosVisibles.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
 
-  const recordatorios=useMemo(()=>{
-    const semanaActual=getMondayStr();
-    const hoy=new Date();
-    // El informe mensual de Ingeniero es del mes ANTERIOR y se carga dentro
-    // de los primeros 5 días del mes siguiente (ej. el de enero se sube
-    // entre el 1 y el 5 de febrero). Mientras estemos dentro de esos 5 días
-    // de gracia, todavía no se considera atrasado el mes recién cerrado —
-    // el que ya debería estar cargado es el anterior a ese.
-    const mesesAtras = hoy.getDate()>5 ? 1 : 2;
-    const fechaObjetivo = new Date(hoy.getFullYear(), hoy.getMonth()-mesesAtras, 1);
-    const mesObjetivo = `${MESES[fechaObjetivo.getMonth()]} ${fechaObjetivo.getFullYear()}`;
-    const nombreObjetivo = MESES[fechaObjetivo.getMonth()].toLowerCase();
-    const anioObjetivo = fechaObjetivo.getFullYear();
-    // Comparación tolerante: hay informes viejos guardados como "JUNIO 2026"
-    // (mayúsculas) o incluso "JUNIO" sin año — se acepta el nombre del mes
-    // sin importar mayúsculas, y si no trae año se asume que coincide (dato
-    // legado) en vez de generar una alerta falsa.
-    const coincideMes = (mes) => {
-      if(!mes) return false;
-      const partes = mes.trim().toLowerCase().split(/\s+/);
-      if(partes[0]!==nombreObjetivo) return false;
-      const anioTexto = parseInt(partes[1], 10);
-      return Number.isFinite(anioTexto) ? anioTexto===anioObjetivo : true;
-    };
-    return proyectosVisibles.map(proj=>{
-      const coordEnviado=reports.some(r=>r.role==="Coordinador"&&r.project===proj&&r.semana===semanaActual&&r.estado==="enviado");
-      const ingEnviado=reports.some(r=>r.role==="Ingeniero"&&r.project===proj&&r.type==="mensual"&&coincideMes(r.mes));
-      return {
-        proj,
-        coordPendiente:!coordEnviado,
-        ingAtrasado:!ingEnviado,
-        mesObjetivo,
-      };
-    }).filter(r=>r.coordPendiente||r.ingAtrasado);
-  },[reports]);
+  const [obligaciones,setObligaciones]=useState(null);
+  useEffect(()=>{ loadObligacionesInformes().then(setObligaciones); },[]);
+  const recordatoriosTodos=useMemo(()=>calcularRecordatorios(reports, obligaciones||[], proyectosVisibles),[reports,obligaciones]);
+  const recordatorios=recordatoriosTodos.filter(r=>r.coordPendiente||r.ingAtrasado);
+  const enCurso=recordatoriosTodos.filter(r=>r.diasSemanaEnCurso!==null);
 
   const presByProject=useMemo(()=>{
     const acc={};
@@ -122,20 +94,29 @@ export function Dashboard({reports,presupuestos,usuario}){
     <div>
       <h2 style={{color:C.blue,marginBottom:20,fontWeight:800}}>Dashboard Directivo</h2>
 
-      {recordatorios.length>0&&(
-        <div style={{background:C.warn+"12",border:`1px solid ${C.warn}55`,borderRadius:12,padding:16,marginBottom:24}}>
-          <div style={{color:C.warn,fontWeight:800,fontSize:14,marginBottom:10}}>📋 Recordatorios — Informes Pendientes</div>
-          <div style={{display:"grid",gap:6}}>
-            {recordatorios.map(r=>(
-              <div key={r.proj} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.bgCard,borderRadius:8,padding:"8px 12px",fontSize:12,flexWrap:"wrap",gap:6}}>
-                <span style={{color:C.text,fontWeight:600}}>{r.proj}</span>
-                <span style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                  {r.coordPendiente&&<span style={{color:C.warn}}>⚠️ Sin informe semanal de Coordinador esta semana</span>}
-                  {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: no ha enviado el informe de {r.mesObjetivo}</span>}
-                </span>
-              </div>
-            ))}
+      {obligaciones&&(
+        <div style={{background:(recordatorios.length?C.warn:C.green)+"12",border:`1px solid ${recordatorios.length?C.warn:C.green}55`,borderRadius:12,padding:16,marginBottom:24}}>
+          <div style={{color:recordatorios.length?C.warn:C.green,fontWeight:800,fontSize:14,marginBottom:10}}>
+            📋 Recordatorios — {recordatorios.length?"Informes vencidos":"Todos los informes al día"}
           </div>
+          {recordatorios.length>0&&(
+            <div style={{display:"grid",gap:6}}>
+              {recordatorios.map(r=>(
+                <div key={r.proj} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.bgCard,borderRadius:8,padding:"8px 12px",fontSize:12,flexWrap:"wrap",gap:6}}>
+                  <span style={{color:C.text,fontWeight:600}}>{r.proj}</span>
+                  <span style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                    {r.coordPendiente&&<span style={{color:C.warn}}>⚠️ Coordinador: no envió el informe de la semana {r.semanaEtiqueta}</span>}
+                    {r.ingAtrasado&&<span style={{color:C.danger}}>🔴 Ingeniero: no ha enviado el informe de {r.mesObjetivo}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {enCurso.length>0&&(
+            <div style={{color:C.muted,fontSize:12,marginTop:recordatorios.length?10:0}}>
+              Semana en curso ({etiquetaSemana(lunesDe())}, se entrega el lunes 12 m): {enCurso.map(r=>`${r.proj} ${r.diasSemanaEnCurso} día${r.diasSemanaEnCurso===1?"":"s"}`).join(" · ")}
+            </div>
+          )}
         </div>
       )}
 
