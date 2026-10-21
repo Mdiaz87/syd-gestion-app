@@ -37,7 +37,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
   const cambiarObligacion=async(o,cambios)=>{
     const nueva={...o,...cambios};
     setObligaciones(os=>os.map(x=>x.project===o.project?nueva:x));
-    const ok=await guardarObligacionInforme(o.project,{coord_semanal:nueva.coord_semanal,ing_mensual:nueva.ing_mensual,ing_mensual_desde:nueva.ing_mensual_desde||null});
+    const ok=await guardarObligacionInforme(o.project,{coord_semanal:nueva.coord_semanal,ing_mensual:nueva.ing_mensual,ing_mensual_desde:nueva.ing_mensual_desde||null,coord_responsable:nueva.coord_responsable||null,ing_responsable:nueva.ing_responsable||null});
     if(!ok){ alert("⚠️ No se pudo guardar el cambio."); setObligaciones(os=>os.map(x=>x.project===o.project?o:x)); }
   };
   const toggleActivo=async u=>{
@@ -60,6 +60,13 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
     }
     setShowAdd(false); setAddNombre(""); setAddRol("Coordinador");
   };
+
+  const selectResponsable=(o,campo,rol)=>(
+    <select value={o[campo]||""} onChange={e=>cambiarObligacion(o,{[campo]:e.target.value||null})} style={{...INP,padding:"2px 6px",width:170}} title={`Responsable (${rol})`}>
+      <option value="">{rol}: automático</option>
+      {usuarios.filter(u=>u.activo&&u.rol===rol).sort((a,b)=>a.nombre.localeCompare(b.nombre,"es")).map(u=><option key={u.id} value={u.id}>{u.nombre}{correos[u.id]?"":" (sin correo)"}</option>)}
+    </select>
+  );
 
   const sorted=[...usuarios].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
   const ROL_C={Directivo:C.blue,Ingeniero:C.yellow,Coordinador:C.green};
@@ -154,7 +161,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
 
       <h3 style={{color:C.blue,margin:"28px 0 6px",fontWeight:800}}>📋 Informes obligatorios por proyecto</h3>
       <div style={{color:C.muted,fontSize:12,marginBottom:12}}>
-        Solo los proyectos marcados generan recordatorios en el Dashboard y por correo. El semanal de Coordinador vence el lunes a las 12 m; el mensual de Ingeniero, el día 5 del mes siguiente. "Desde" es el primer mes que se exige (para proyectos nuevos).
+        Solo los proyectos marcados generan recordatorios en el Dashboard y por correo (cada 2 días, 7 a.m.). El semanal de Coordinador vence el lunes a las 12 m; el mensual de Ingeniero, el día 5 del mes siguiente. "Desde" es el primer mes que se exige (para proyectos nuevos). Si no eliges responsable, el correo le llega a quien hizo el último informe de ese proyecto.
       </div>
       <div style={{display:"grid",gap:6}}>
         {obligaciones.map(o=>(
@@ -164,9 +171,11 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
               <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
                 <input type="checkbox" checked={o.coord_semanal} onChange={e=>cambiarObligacion(o,{coord_semanal:e.target.checked})}/> Semanal Coordinador
               </label>
+              {o.coord_semanal&&selectResponsable(o,"coord_responsable","Coordinador")}
               <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
                 <input type="checkbox" checked={o.ing_mensual} onChange={e=>cambiarObligacion(o,{ing_mensual:e.target.checked})}/> Mensual Ingeniero
               </label>
+              {o.ing_mensual&&selectResponsable(o,"ing_responsable","Ingeniero")}
               {o.ing_mensual&&(
                 <label style={{display:"flex",gap:6,alignItems:"center",color:C.muted}}>
                   desde <input type="month" value={o.ing_mensual_desde||""} onChange={e=>cambiarObligacion(o,{ing_mensual_desde:e.target.value||null})} style={{...INP,padding:"2px 6px",width:150}}/>
