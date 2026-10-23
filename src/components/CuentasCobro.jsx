@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, actualizarEstadoCuentaCobro, marcarPagoRealizado, notificarPagoAprobado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, marcarPagoRealizado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, enviarAGerencia, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -9,7 +9,9 @@ const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
 const ESTADO_INFO = {
   pendiente_contable: { label: "Pendiente de revisión contable", color: C.warn },
   devuelto: { label: "Devuelto", color: C.danger },
-  aprobado_contable: { label: "Aprobado por Contabilidad", color: C.blueMid },
+  // Desde 2026-10-23 la aprobación final la dan Susana Sierra y Miguel Díaz en
+  // SYD Gestión (ya no el Directivo aquí); esta app solo recibe la decisión.
+  aprobado_contable: { label: "En aprobación de Gerencia", color: C.blueMid },
   aprobado_total: { label: "Aprobado", color: C.green },
   rechazado: { label: "Rechazado", color: C.muted },
 };
@@ -345,108 +347,6 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   );
 }
 
-// ── MODAL DE REVISIÓN (Directivo) ─────────────────────────────────────────────
-function RevisarPagoModal({ cuenta, onClose, onResuelto }) {
-  const [modo, setModo] = useState(null); // 'devuelto' | 'rechazado'
-  const [texto, setTexto] = useState("");
-  const [error, setError] = useState("");
-  const [enviando, setEnviando] = useState(false);
-
-  const confirmar = async (estado) => {
-    if ((estado === "devuelto" || estado === "rechazado") && !texto.trim()) {
-      setError(estado === "rechazado" ? "⚠️ Escribe el motivo del rechazo." : "⚠️ Escribe qué debe corregir.");
-      return;
-    }
-    setEnviando(true);
-    const revisadoPor = cuenta.__usuario.nombre;
-    const ok = await actualizarEstadoCuentaCobro(cuenta.id, estado,
-      { condicion: estado === "devuelto" ? texto.trim() : null, motivoRechazo: estado === "rechazado" ? texto.trim() : null },
-      revisadoPor);
-    let notifOk = true, legalizacionOk = true, aprobacionCxpOk = true;
-    if (ok && estado === "aprobado_total") {
-      notifOk = await notificarPagoAprobado({ ...cuenta, estado });
-      legalizacionOk = await legalizarPago(cuenta.id);
-      aprobacionCxpOk = await aprobarCuentaPorPagar(cuenta.id);
-    }
-    setEnviando(false);
-    if (!ok) { setError("⚠️ No se pudo guardar la decisión. Intenta de nuevo."); return; }
-    onResuelto(estado, notifOk, legalizacionOk, aprobacionCxpOk);
-    onClose();
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
-      <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px #0003", maxHeight: "90vh", overflowY: "auto" }}>
-        <h3 style={{ color: C.blue, margin: "0 0 4px", fontWeight: 600, letterSpacing: "-0.1px" }}>Revisar cuenta de cobro</h3>
-        <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>{cuenta.project} · {cuenta.proveedor}</div>
-
-        <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
-          {cuenta.empresa && <div><b>Empresa:</b> {cuenta.empresa}{cuenta.centro_costo ? ` · Centro de costo: ${cuenta.centro_costo}` : ""}</div>}
-          {cuenta.categoria && <div><b>Categoría:</b> {cuenta.categoria}{cuenta.subcategoria ? ` · Subcategoría: ${cuenta.subcategoria}` : ""}</div>}
-          <div><b>Concepto:</b> {cuenta.concepto}</div>
-          {cuenta.cantidad && <div><b>Cantidad:</b> {cuenta.cantidad} {cuenta.unidad}</div>}
-          {cuenta.valor_final_pagar != null ? (
-            <>
-              <div><b>Valor registrado:</b> <span style={{ textDecoration: "line-through", color: C.muted }}>{fmt(cuenta.valor)}</span></div>
-              {!!cuenta.retencion && <div><b>Retención aplicada por Contabilidad:</b> {fmt(cuenta.retencion)}</div>}
-              <div><b>Valor final a pagar:</b> <span style={{ color: C.green, fontWeight: 700 }}>{fmt(cuenta.valor_final_pagar)}</span></div>
-            </>
-          ) : (
-            <div><b>Valor:</b> {fmt(cuenta.valor)}</div>
-          )}
-          {cuenta.observaciones && <div><b>Observaciones:</b> {cuenta.observaciones}</div>}
-          <div><b>Registrado por:</b> {cuenta.autor}</div>
-          {soportesDe(cuenta).length > 0 && (
-            <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
-              {soportesDe(cuenta).map((s, i) => (
-                <a key={i} href={s.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>📎 {s.nombre || `Soporte ${i + 1}`} →</a>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {(cuenta.historial || []).length > 1 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 }}>Historial</div>
-            <div style={{ display: "grid", gap: 4 }}>
-              {cuenta.historial.map((h, i) => (
-                <div key={i} style={{ fontSize: 12, color: C.text, display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span><b>{h.accion}</b>{h.detalle ? `: ${h.detalle}` : ""} — {h.por}</span>
-                  <span style={{ color: C.muted, whiteSpace: "nowrap" }}>{new Date(h.fecha).toLocaleDateString("es-CO")}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!modo && (
-          <div style={{ display: "grid", gap: 8 }}>
-            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>✅ Aprobar</button>
-            <button onClick={() => setModo("devuelto")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>🔄 Devolver para corrección</button>
-            <button onClick={() => setModo("rechazado")} style={{ background: C.danger, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>❌ Rechazar</button>
-            <button onClick={onClose} style={{ ...BTN_SM, padding: 10 }}>Cancelar</button>
-          </div>
-        )}
-
-        {modo && (
-          <div>
-            <label style={{ color: C.muted, fontSize: 12 }}>{modo === "rechazado" ? "Motivo del rechazo" : "¿Qué debe corregir el Ingeniero?"}</label>
-            <textarea style={{ ...INP, minHeight: 70, marginBottom: 12 }} value={texto} onChange={e => setTexto(e.target.value)} placeholder={modo === "rechazado" ? "Ej: no procede este pago" : "Ej: falta remisión firmada"} autoFocus />
-            {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setModo(null); setError(""); }} style={{ ...BTN_SM, flex: 1, padding: 10 }}>Volver</button>
-              <button onClick={() => confirmar(modo)} disabled={enviando} style={{ background: modo === "rechazado" ? C.danger : C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 10, flex: 1, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>
-                {enviando ? "Guardando..." : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        )}
-        {!modo && error && <div style={{ color: C.danger, fontSize: 13, marginTop: 12 }}>{error}</div>}
-      </div>
-    </div>
-  );
-}
-
 // ── MODAL DE FACTURA DE LEGALIZACIÓN (posterior al pago) ──────────────────────
 function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
   const [existentes, setExistentes] = useState(facturasLegalizacionDe(cuenta));
@@ -529,7 +429,6 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const [fProyecto, setFProyecto] = useState("");
   const [quickFilter, setQuickFilter] = useState("");
   const [visibleCount, setVisibleCount] = useState(25);
-  const [revisando, setRevisando] = useState(null);
   const [editando, setEditando] = useState(null);
   const [facturando, setFacturando] = useState(null);
   const [aviso, setAviso] = useState(null);
@@ -541,8 +440,10 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
-  const pendientesAprobacion = useMemo(() =>
-    usuario.rol === "Directivo" ? cuentas.filter(c => c.estado === "aprobado_contable") : [],
+  // Aprobadas por Contabilidad que no llegaron a SYD Gestión (falló el envío,
+  // o estaban esperando al Directivo cuando se quitó ese paso).
+  const sinEnviarAGerencia = useMemo(() =>
+    usuario.rol === "Directivo" ? cuentas.filter(c => c.estado === "aprobado_contable" && c.aprobacion_cxp_estado !== "enviado") : [],
     [cuentas, usuario]);
 
   const filtradas = useMemo(() => {
@@ -562,17 +463,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   useEffect(() => { setVisibleCount(25); }, [search, fProyecto, quickFilter]);
 
-  const onResuelto = (estado, notifOk, legalizacionOk, aprobacionCxpOk) => {
+  const reenviarAGerencia = async (id) => {
+    setAviso("Enviando a aprobación de Gerencia...");
+    const ok = await enviarAGerencia(id);
     onRefresh();
-    if (estado === "aprobado_total" && !notifOk) {
-      setAviso("⚠️ Se guardó la decisión, pero no se pudo notificar a contabilidad por correo. Avísales manualmente.");
-    } else if (estado === "aprobado_total" && !legalizacionOk) {
-      setAviso("⚠️ Se aprobó, pero no se pudo enviar a la app de legalización. Usa el botón 🔁 en la tabla para reintentar.");
-    } else if (estado === "aprobado_total" && !aprobacionCxpOk) {
-      setAviso("⚠️ Se aprobó, pero no se pudo crear la obligación en Cuentas por Pagar. Usa el botón 🔁 en la tabla para reintentar.");
-    } else {
-      setAviso("✅ Decisión guardada correctamente.");
-    }
+    setAviso(ok ? "✅ Enviada a SYD Gestión para la aprobación de Susana Sierra y Miguel Díaz." : "⚠️ No se pudo enviar. Intenta de nuevo en unos minutos.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -651,16 +546,17 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}
 
-      {pendientesAprobacion.length > 0 && (
+      {sinEnviarAGerencia.length > 0 && (
         <div style={{ background: C.warn + "10", border: `1px solid ${C.warn}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-          <div style={{ color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>🔔 Pendientes de tu aprobación ({pendientesAprobacion.length})</div>
+          <div style={{ color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📤 Aprobadas por Contabilidad, sin enviar a Gerencia ({sinEnviarAGerencia.length})</div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>La aprobación final ahora la dan Susana Sierra y Miguel Díaz en SYD Gestión. Envíalas para que les lleguen.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pendientesAprobacion.map(c => (
+            {sinEnviarAGerencia.map(c => (
               <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
                 <div style={{ fontSize: 13 }}>
                   <b style={{ color: C.blue }}>{c.project}</b> · {c.proveedor} · <span style={{ color: C.muted }}>{c.concepto}</span> · <span style={{ fontWeight: 700 }}>{fmt(c.valor_final_pagar ?? c.valor)}</span>
                 </div>
-                <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
+                <button onClick={() => reenviarAGerencia(c.id)} title={c.aprobacion_cxp_error || ""} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>📤 Enviar a Gerencia</button>
               </div>
             ))}
           </div>
@@ -678,7 +574,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {[
           { key: "", label: "Todas" },
-          ...(usuario.rol === "Directivo" ? [{ key: "pendientes_mias", label: "🔔 Pendientes de tu aprobación" }] : []),
+          { key: "pendientes_mias", label: "En aprobación de Gerencia" },
           { key: "revision_contable", label: "En revisión contable" },
           { key: "aprobadas", label: "Aprobadas" },
           { key: "por_pagar", label: "⏳ Por pagar" },
@@ -757,8 +653,8 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           {puedeEditar(c, usuario) && (
                             <button onClick={() => setEditando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>✏️ Editar</button>
                           )}
-                          {usuario.rol === "Directivo" && c.estado === "aprobado_contable" && (
-                            <button onClick={() => setRevisando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>Revisar</button>
+                          {usuario.rol === "Directivo" && c.estado === "aprobado_contable" && c.aprobacion_cxp_estado !== "enviado" && (
+                            <button onClick={() => reenviarAGerencia(c.id)} title={c.aprobacion_cxp_error || "Enviar a aprobación de Susana Sierra y Miguel Díaz"} style={{ ...BTN_SM, color: c.aprobacion_cxp_estado === "error" ? C.danger : C.blueMid, borderColor: c.aprobacion_cxp_estado === "error" ? C.danger : C.blueMid }}>📤 Enviar a Gerencia</button>
                           )}
                           {usuario.rol === "Directivo" && c.estado === "pendiente_contable" && c.revision_contable_estado === "error" && (
                             <button onClick={() => reintentarRevisionContable(c.id)} title={c.revision_contable_error || "Falló el envío a revisión contable"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Rev. contable</button>
@@ -795,13 +691,6 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
         </>
       )}
 
-      {revisando && (
-        <RevisarPagoModal
-          cuenta={{ ...revisando, __usuario: usuario }}
-          onClose={() => setRevisando(null)}
-          onResuelto={onResuelto}
-        />
-      )}
       {facturando && (
         <FacturaLegalizacionModal
           cuenta={facturando}

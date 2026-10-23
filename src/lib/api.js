@@ -317,6 +317,15 @@ export async function enviarFacturaLegalizacion(cuentaId, facturas){
   return !!data?.ok;
 }
 
+// Reenvía a SYD Gestión una cuenta ya aprobada por Contabilidad, para la
+// aprobación de Susana Sierra -> Miguel Díaz (solo Directivo; normalmente el
+// envío es automático al aprobar Contabilidad).
+export async function enviarAGerencia(cuentaId){
+  const { data, error } = await supabase.functions.invoke('enviar-a-gerencia', { body: { cuentaId } });
+  if(error){ console.error('Error invocando enviar-a-gerencia:', error); return false; }
+  return !!data?.ok;
+}
+
 // Empuja la cuenta de cobro a la app administrativa para que Contabilidad
 // la revise ANTES de la aprobación final del Directivo. Se llama al
 // registrar una cuenta nueva o al reenviarla tras un "devuelto".
