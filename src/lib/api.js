@@ -68,7 +68,23 @@ export function shapeUsuario(profile){
 // (RPC server-side, no depende de nada guardado en el navegador — ver
 // [[project_syd]] para el diseño). Si está bloqueado, ni siquiera se
 // intenta la contraseña, así nunca se revela si el PIN es correcto.
+// Login por servidor (Edge Function iniciar-sesion): bloqueo real de
+// intentos y contraseña no derivable desde el navegador. En prueba: solo con
+// ?login=v2 en la URL; el resto sigue con el login de siempre.
+const LOGIN_V2 = typeof window!=="undefined" && new URLSearchParams(window.location.search).get('login')==='v2';
+async function loginServidor(profile, pin){
+  const { data, error } = await supabase.functions.invoke('iniciar-sesion', { body: { profileId: profile.id, pin } });
+  if(error || !data){ console.error('Error en iniciar-sesion:', error); return null; }
+  if(data.bloqueado) return { bloqueado: true, segundosRestantes: data.segundosRestantes };
+  if(!data.ok || !data.tokenHash) return null;
+  let r = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' });
+  if(r.error) r = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'email' });
+  if(r.error){ console.error('Error canjeando la sesión:', r.error); return null; }
+  return shapeUsuario(profile);
+}
+
 export async function login(profile, pin){
+  if(LOGIN_V2) return loginServidor(profile, pin);
   const { data: chk } = await supabase.rpc('intentos_restantes', { p_profile_id: profile.id });
   if(chk?.bloqueado){
     return { bloqueado: true, segundosRestantes: chk.segundos_restantes };
