@@ -15,6 +15,8 @@ import { ConsultasPanel } from "./components/ConsultasPanel.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
 import { PanelAdmin } from "./components/PanelAdmin.jsx";
 import { CuentasCobro } from "./components/CuentasCobro.jsx";
+import { MiCaja } from "./components/MiCaja.jsx";
+import { sincronizarIngenieros } from "./lib/cajas.js";
 
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App(){
@@ -161,6 +163,12 @@ export default function App(){
     setDeletingReport(null);
   };
 
+  // Cajas menores: al entrar un Directivo se manda la lista de ingenieros a
+  // SYD Gestión, para que Tesorería pueda escoger el responsable de cada caja.
+  useEffect(()=>{
+    if(usuario?.rol==="Directivo") sincronizarIngenieros();
+  },[usuario?.id]);
+
   if(loading) return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:C.muted}}>Cargando...</div>
@@ -183,7 +191,7 @@ export default function App(){
   const tabs = usuario.rol==="Directivo"
     ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
-    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"}]
+    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
@@ -200,10 +208,10 @@ export default function App(){
           <button onClick={async()=>{await supabase.auth.signOut();setUsuario(null);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:12}}>Salir</button>
         </div>
       </div>
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,padding:"0 24px",background:C.bgCard}}>
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,padding:"0 24px",background:C.bgCard,overflowX:"auto"}}>
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>{setTab(t.id);setSelected(null);if(t.id!=="nuevo")setEditingReport(null);}}
-            style={{background:"none",border:"none",color:tab===t.id?C.blue:C.muted,borderBottom:tab===t.id?`2.5px solid ${C.blue}`:"2.5px solid transparent",padding:"12px 16px",cursor:"pointer",fontSize:14,fontWeight:tab===t.id?700:400}}>
+            style={{background:"none",border:"none",color:tab===t.id?C.blue:C.muted,borderBottom:tab===t.id?`2.5px solid ${C.blue}`:"2.5px solid transparent",padding:"12px 16px",cursor:"pointer",fontSize:14,fontWeight:tab===t.id?700:400,whiteSpace:"nowrap",flexShrink:0}}>
             {t.label}
           </button>
         ))}
@@ -337,6 +345,7 @@ export default function App(){
         {tab==="pagos"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&(
           <CuentasCobro cuentas={cuentasCobro} usuario={usuario} onRefresh={async()=>setCuentasCobro(await loadCuentasCobro())}/>
         )}
+        {tab==="caja"&&usuario.rol==="Ingeniero"&&<MiCaja/>}
         {tab==="equipo"&&usuario.rol==="Directivo"&&!usuario.proyectoAsignado&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
