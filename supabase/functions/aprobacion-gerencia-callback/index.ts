@@ -8,6 +8,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //     hacía la aprobación del Directivo en esta app.
 //   - devuelto / rechazado: un Directivo la devolvió o rechazó en Gestión, con
 //     motivo. El ingeniero la ve igual que una devolución de siempre.
+//   - pagado: Tesorería registró en Gestión que el banco pagó toda la cuenta
+//     (pedido de Miguel, 2026-10-23). La columna "Pago" queda en Pagado sola,
+//     con la fecha del pago -- antes había que marcarla a mano.
 // Solo cambia el estado de cuentas que están esperando esa decisión
 // ("aprobado_contable"); si llega un aviso tarde o repetido, solo se anota.
 //
@@ -51,8 +54,8 @@ Deno.serve(async (req) => {
     if (req.headers.get("x-webhook-secret") !== Deno.env.get("APROBACION_GERENCIA_CALLBACK_SECRET")) {
       return new Response(JSON.stringify({ ok: false, error: "No autorizado" }), { status: 401 });
     }
-    const { referenciaExterna, decision, motivo } = await req.json();
-    if (!referenciaExterna || !["aprobado", "devuelto", "rechazado"].includes(decision)) {
+    const { referenciaExterna, decision, motivo, fechaPago } = await req.json();
+    if (!referenciaExterna || !["aprobado", "devuelto", "rechazado", "pagado"].includes(decision)) {
       return new Response(JSON.stringify({ ok: false, error: "Falta referenciaExterna o decision inválida" }), { status: 400 });
     }
 
@@ -64,6 +67,20 @@ Deno.serve(async (req) => {
     }
 
     const ahora = new Date().toISOString();
+
+    if (decision === "pagado") {
+      if (cuenta.pago_realizado) {
+        return new Response(JSON.stringify({ ok: true, nota: "Ya estaba marcada como pagada." }), { status: 200 });
+      }
+      // "Marcado como pagado" es la acción que lee la columna Pago para
+      // mostrar la fecha. fechaPago llega como día (AAAA-MM-DD): mediodía de
+      // Colombia para que no se corra un día al mostrarla.
+      const fecha = fechaPago ? `${fechaPago}T17:00:00.000Z` : ahora;
+      const historialPago = [...(cuenta.historial || []), { accion: "Marcado como pagado", detalle: "Pago registrado por Tesorería en SYD Gestión", por: "Tesorería (SYD Gestión)", fecha }];
+      await supabase.from("cuentas_cobro").update({ pago_realizado: true, historial: historialPago }).eq("id", cuentaId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
     const por = "Gerencia (SYD Gestión)";
     const etiqueta = decision === "aprobado" ? "Aprobado por Gerencia (Susana Sierra -> Miguel Díaz)"
       : decision === "devuelto" ? "Devuelto en Tesorería (SYD Gestión)" : "Rechazado en Tesorería (SYD Gestión)";
