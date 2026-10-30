@@ -86,7 +86,11 @@ Deno.serve(async (req) => {
       : decision === "devuelto" ? "Devuelto en Tesorería (SYD Gestión)" : "Rechazado en Tesorería (SYD Gestión)";
     const historial = [...(cuenta.historial || []), { accion: etiqueta, detalle: motivo || null, por, fecha: ahora }];
 
-    if (cuenta.estado !== "aprobado_contable") {
+    // Desde 2026-10-30 la cuenta solo se envía a Gestión con todas las firmas
+    // de Gerencia en SYD Técnica (aprobacion_cxp_estado = 'enviado'). Una
+    // decisión sobre una cuenta que aún no llegó así (ej. las enviadas antes
+    // del cambio) solo se anota.
+    if (cuenta.estado !== "aprobado_contable" || cuenta.aprobacion_cxp_estado !== "enviado") {
       // Aviso tardío o repetido: no cambia el estado, solo queda anotado.
       await supabase.from("cuentas_cobro").update({ historial }).eq("id", cuentaId);
       return new Response(JSON.stringify({ ok: true, nota: `La cuenta estaba en ${cuenta.estado}; solo se anotó el aviso.` }), { status: 200 });

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, marcarPagoRealizado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, enviarAGerencia, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, marcarPagoRealizado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, enviarAGerencia, firmarGerencia, loadAprobadoresGerencia, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -9,8 +9,9 @@ const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
 const ESTADO_INFO = {
   pendiente_contable: { label: "Pendiente de revisión contable", color: C.warn },
   devuelto: { label: "Devuelto", color: C.danger },
-  // Desde 2026-10-23 la aprobación final la dan Susana Sierra y Miguel Díaz en
-  // SYD Gestión (ya no el Directivo aquí); esta app solo recibe la decisión.
+  // Después de Contabilidad firman en orden los aprobadores del proyecto aquí
+  // (Susana -> Miguel; Icon Park: Carmen -> Susana -> Miguel) y luego la cuenta
+  // pasa a Cuentas por Pagar de SYD Gestión (2026-10-30).
   aprobado_contable: { label: "En aprobación de Gerencia", color: C.blueMid },
   aprobado_total: { label: "Aprobado", color: C.green },
   rechazado: { label: "Rechazado", color: C.muted },
@@ -347,6 +348,123 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   );
 }
 
+// ── FIRMAS DE GERENCIA EN SYD TÉCNICA ─────────────────────────────────────────
+// cadena: [{profile_id, nombre}] en orden para el proyecto (o la de '*').
+const cadenaDe = (aprobadores, project) => {
+  const propia = aprobadores.filter(a => a.project === project);
+  return (propia.length ? propia : aprobadores.filter(a => a.project === "*")).sort((a, b) => a.orden - b.orden);
+};
+const firmasDe = (cuenta) => Array.isArray(cuenta.aprobaciones_gerencia) ? cuenta.aprobaciones_gerencia : [];
+const enGestion = (cuenta) => cuenta.estado === "aprobado_contable" && cuenta.aprobacion_cxp_estado === "enviado";
+// A quién le toca firmar (null si no está esperando firma aquí).
+const turnoDe = (cuenta, cadena) =>
+  cuenta.estado === "aprobado_contable" && !enGestion(cuenta) ? (cadena[firmasDe(cuenta).length] || null) : null;
+
+function CadenaFirmas({ cuenta, cadena }) {
+  const firmas = firmasDe(cuenta);
+  return (
+    <span style={{ color: C.muted, whiteSpace: "nowrap" }}>
+      {cadena.map((a, i) => (
+        <span key={a.profile_id}>{i > 0 && " → "}{(a.nombre || "").split(" ")[0]} {i < firmas.length ? "✅" : i === firmas.length ? "⏳" : "·"}</span>
+      ))}
+    </span>
+  );
+}
+
+function FirmaGerenciaModal({ cuenta, cadena, onClose, onResuelto }) {
+  const [modo, setModo] = useState(null); // 'devuelto' | 'rechazado'
+  const [texto, setTexto] = useState("");
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const confirmar = async (estado) => {
+    if ((estado === "devuelto" || estado === "rechazado") && !texto.trim()) {
+      setError(estado === "rechazado" ? "⚠️ Escribe el motivo del rechazo." : "⚠️ Escribe qué debe corregir.");
+      return;
+    }
+    setEnviando(true);
+    const decision = estado === "aprobado_total" ? "aprobar" : estado === "devuelto" ? "devolver" : "rechazar";
+    const res = await firmarGerencia(cuenta.id, decision, texto.trim());
+    setEnviando(false);
+    if (!res.ok) { setError(`⚠️ ${res.error || "No se pudo guardar la decisión. Intenta de nuevo."}`); return; }
+    onResuelto(decision, res);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
+      <div style={{ background: C.bgCard, borderRadius: 16, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px #0003", maxHeight: "90vh", overflowY: "auto" }}>
+        <h3 style={{ color: C.blue, margin: "0 0 4px", fontWeight: 600, letterSpacing: "-0.1px" }}>Firma de Gerencia</h3>
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 8 }}>{cuenta.project} · {cuenta.proveedor}</div>
+        <div style={{ fontSize: 12, marginBottom: 16 }}><CadenaFirmas cuenta={cuenta} cadena={cadena} /></div>
+
+        <div style={{ background: C.bgCard2, borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16, border: `1px solid ${C.border}` }}>
+          {cuenta.empresa && <div><b>Empresa:</b> {cuenta.empresa}{cuenta.centro_costo ? ` · Centro de costo: ${cuenta.centro_costo}` : ""}</div>}
+          {cuenta.categoria && <div><b>Categoría:</b> {cuenta.categoria}{cuenta.subcategoria ? ` · Subcategoría: ${cuenta.subcategoria}` : ""}</div>}
+          <div><b>Concepto:</b> {cuenta.concepto}</div>
+          {cuenta.cantidad && <div><b>Cantidad:</b> {cuenta.cantidad} {cuenta.unidad}</div>}
+          {cuenta.valor_final_pagar != null ? (
+            <>
+              <div><b>Valor registrado:</b> <span style={{ textDecoration: "line-through", color: C.muted }}>{fmt(cuenta.valor)}</span></div>
+              {!!cuenta.retencion && <div><b>Retención aplicada por Contabilidad:</b> {fmt(cuenta.retencion)}</div>}
+              <div><b>Valor final a pagar:</b> <span style={{ color: C.green, fontWeight: 700 }}>{fmt(cuenta.valor_final_pagar)}</span></div>
+            </>
+          ) : (
+            <div><b>Valor:</b> {fmt(cuenta.valor)}</div>
+          )}
+          {cuenta.observaciones && <div><b>Observaciones:</b> {cuenta.observaciones}</div>}
+          <div><b>Registrado por:</b> {cuenta.autor}</div>
+          {soportesDe(cuenta).length > 0 && (
+            <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
+              {soportesDe(cuenta).map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>📎 {s.nombre || `Soporte ${i + 1}`} →</a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {(cuenta.historial || []).length > 1 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 }}>Historial</div>
+            <div style={{ display: "grid", gap: 4 }}>
+              {cuenta.historial.map((h, i) => (
+                <div key={i} style={{ fontSize: 12, color: C.text, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span><b>{h.accion}</b>{h.detalle ? `: ${h.detalle}` : ""} — {h.por}</span>
+                  <span style={{ color: C.muted, whiteSpace: "nowrap" }}>{new Date(h.fecha).toLocaleDateString("es-CO")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!modo && (
+          <div style={{ display: "grid", gap: 8 }}>
+            <button onClick={() => confirmar("aprobado_total")} disabled={enviando} style={{ background: C.green, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>✅ Aprobar</button>
+            <button onClick={() => setModo("devuelto")} style={{ background: C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>🔄 Devolver para corrección</button>
+            <button onClick={() => setModo("rechazado")} style={{ background: C.danger, color: "#fff", border: "none", borderRadius: 12, padding: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>❌ Rechazar</button>
+            <button onClick={onClose} style={{ ...BTN_SM, padding: 10 }}>Cancelar</button>
+          </div>
+        )}
+
+        {modo && (
+          <div>
+            <label style={{ color: C.muted, fontSize: 12 }}>{modo === "rechazado" ? "Motivo del rechazo" : "¿Qué debe corregir el Ingeniero?"}</label>
+            <textarea style={{ ...INP, minHeight: 70, marginBottom: 12 }} value={texto} onChange={e => setTexto(e.target.value)} placeholder={modo === "rechazado" ? "Ej: no procede este pago" : "Ej: falta remisión firmada"} autoFocus />
+            {error && <div style={{ color: C.danger, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setModo(null); setError(""); }} style={{ ...BTN_SM, flex: 1, padding: 10 }}>Volver</button>
+              <button onClick={() => confirmar(modo)} disabled={enviando} style={{ background: modo === "rechazado" ? C.danger : C.blueMid, color: "#fff", border: "none", borderRadius: 12, padding: 10, flex: 1, fontWeight: 700, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>
+                {enviando ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        )}
+        {!modo && error && <div style={{ color: C.danger, fontSize: 13, marginTop: 12 }}>{error}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── MODAL DE FACTURA DE LEGALIZACIÓN (posterior al pago) ──────────────────────
 function FacturaLegalizacionModal({ cuenta, onClose, onEnviada }) {
   const [existentes, setExistentes] = useState(facturasLegalizacionDe(cuenta));
@@ -438,13 +556,21 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
   const legalizacionesBloqueadas = legalizacionesPendientes.filter(p => p.evento === "bloqueada");
   const legalizacionesPorVencer = legalizacionesPendientes.filter(p => p.evento === "por_vencer");
 
+  const [aprobadores, setAprobadores] = useState([]);
+  const [firmando, setFirmando] = useState(null);
+  useEffect(() => { loadAprobadoresGerencia().then(setAprobadores); }, []);
+
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
-  // Aprobadas por Contabilidad que no llegaron a SYD Gestión (falló el envío,
-  // o estaban esperando al Directivo cuando se quitó ese paso).
+  // Cuentas donde le toca firmar a este usuario, y las que ya tienen todas las
+  // firmas pero no llegaron a SYD Gestión (falló el envío).
+  const pendientesDeMiFirma = useMemo(() =>
+    cuentas.filter(c => turnoDe(c, cadenaDe(aprobadores, c.project))?.profile_id === usuario.id),
+    [cuentas, aprobadores, usuario]);
   const sinEnviarAGerencia = useMemo(() =>
-    usuario.rol === "Directivo" ? cuentas.filter(c => c.estado === "aprobado_contable" && c.aprobacion_cxp_estado !== "enviado") : [],
-    [cuentas, usuario]);
+    usuario.rol === "Directivo" ? cuentas.filter(c => c.estado === "aprobado_contable" && !enGestion(c) && aprobadores.length
+      && firmasDe(c).length >= cadenaDe(aprobadores, c.project).length) : [],
+    [cuentas, aprobadores, usuario]);
 
   const filtradas = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -467,7 +593,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     setAviso("Enviando a aprobación de Gerencia...");
     const ok = await enviarAGerencia(id);
     onRefresh();
-    setAviso(ok ? "✅ Enviada a SYD Gestión para la aprobación de Susana Sierra y Miguel Díaz." : "⚠️ No se pudo enviar. Intenta de nuevo en unos minutos.");
+    setAviso(ok ? "✅ Enviada a Cuentas por Pagar de SYD Gestión." : "⚠️ No se pudo enviar. Intenta de nuevo en unos minutos.");
     setTimeout(() => setAviso(null), 5000);
   };
 
@@ -546,10 +672,27 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 16, color: C.text, fontSize: 13 }}>{aviso}</div>}
 
+      {pendientesDeMiFirma.length > 0 && (
+        <div style={{ background: C.blueMid + "10", border: `1px solid ${C.blueMid}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ color: C.blueMid, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>✍️ Pendientes de tu firma ({pendientesDeMiFirma.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendientesDeMiFirma.map(c => (
+              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13 }}>
+                  <b style={{ color: C.blue }}>{c.project}</b> · {c.proveedor} · <span style={{ color: C.muted }}>{c.concepto}</span> · <span style={{ fontWeight: 700 }}>{fmt(c.valor_final_pagar ?? c.valor)}</span>
+                  <div style={{ fontSize: 11 }}><CadenaFirmas cuenta={c} cadena={cadenaDe(aprobadores, c.project)} /></div>
+                </div>
+                <button onClick={() => setFirmando(c)} style={{ ...BTN_SM, color: C.green, borderColor: C.green, fontWeight: 700 }}>✍️ Revisar</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {sinEnviarAGerencia.length > 0 && (
         <div style={{ background: C.warn + "10", border: `1px solid ${C.warn}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-          <div style={{ color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📤 Aprobadas por Contabilidad, sin enviar a Gerencia ({sinEnviarAGerencia.length})</div>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>La aprobación final ahora la dan Susana Sierra y Miguel Díaz en SYD Gestión. Envíalas para que les lleguen.</div>
+          <div style={{ color: C.warn, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📤 Firmadas por Gerencia, sin llegar a SYD Gestión ({sinEnviarAGerencia.length})</div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>Falló el envío a Cuentas por Pagar. Reintenta.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {sinEnviarAGerencia.map(c => (
               <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", flexWrap: "wrap" }}>
@@ -613,7 +756,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                   <tr><td colSpan={8} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
                 {filtradas.slice(0, visibleCount).map(c => {
-                  const info = ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable;
+                  const info = c.estado === "aprobado_contable"
+                    ? (enGestion(c) ? { label: "En aprobación SYD Gestión", color: C.blueMid } : { label: "Firma de Gerencia", color: C.warn })
+                    : (ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable);
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "9px 12px", color: C.muted, whiteSpace: "nowrap" }}>{fechaCorta(c.created_at)}</td>
@@ -626,6 +771,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, letterSpacing: "0.1px", whiteSpace: "nowrap" }}>{info.label}</span>
+                        {c.estado === "aprobado_contable" && !enGestion(c) && <div style={{ fontSize: 10, marginTop: 3 }}><CadenaFirmas cuenta={c} cadena={cadenaDe(aprobadores, c.project)} /></div>}
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         {c.estado === "aprobado_total" ? (
@@ -653,8 +799,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                           {puedeEditar(c, usuario) && (
                             <button onClick={() => setEditando(c)} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>✏️ Editar</button>
                           )}
-                          {usuario.rol === "Directivo" && c.estado === "aprobado_contable" && c.aprobacion_cxp_estado !== "enviado" && (
-                            <button onClick={() => reenviarAGerencia(c.id)} title={c.aprobacion_cxp_error || "Enviar a aprobación de Susana Sierra y Miguel Díaz"} style={{ ...BTN_SM, color: c.aprobacion_cxp_estado === "error" ? C.danger : C.blueMid, borderColor: c.aprobacion_cxp_estado === "error" ? C.danger : C.blueMid }}>📤 Enviar a Gerencia</button>
+                          {turnoDe(c, cadenaDe(aprobadores, c.project))?.profile_id === usuario.id && (
+                            <button onClick={() => setFirmando(c)} style={{ ...BTN_SM, color: C.green, borderColor: C.green, fontWeight: 700 }}>✍️ Revisar</button>
+                          )}
+                          {sinEnviarAGerencia.some(x => x.id === c.id) && (
+                            <button onClick={() => reenviarAGerencia(c.id)} title={c.aprobacion_cxp_error || "Reintentar envío a Cuentas por Pagar de SYD Gestión"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>📤 Enviar a Gerencia</button>
                           )}
                           {usuario.rol === "Directivo" && c.estado === "pendiente_contable" && c.revision_contable_estado === "error" && (
                             <button onClick={() => reintentarRevisionContable(c.id)} title={c.revision_contable_error || "Falló el envío a revisión contable"} style={{ ...BTN_SM, color: C.danger, borderColor: C.danger }}>🔁 Rev. contable</button>
@@ -691,6 +840,21 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
         </>
       )}
 
+      {firmando && (
+        <FirmaGerenciaModal
+          cuenta={firmando}
+          cadena={cadenaDe(aprobadores, firmando.project)}
+          onClose={() => setFirmando(null)}
+          onResuelto={(decision, res) => {
+            onRefresh();
+            setAviso(decision !== "aprobar" ? "✅ Decisión guardada; la cuenta volvió al ingeniero."
+              : !res.completa ? "✅ Firmada. Queda pendiente la siguiente firma de Gerencia."
+              : res.enviada ? "✅ Firmada y enviada a Cuentas por Pagar de SYD Gestión."
+              : "⚠️ Firmada, pero no se pudo enviar a SYD Gestión. Usa 📤 Enviar a Gerencia para reintentar.");
+            setTimeout(() => setAviso(null), 6000);
+          }}
+        />
+      )}
       {facturando && (
         <FacturaLegalizacionModal
           cuenta={facturando}

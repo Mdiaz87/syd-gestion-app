@@ -320,6 +320,24 @@ export async function enviarFacturaLegalizacion(cuentaId, facturas){
 // Reenvía a SYD Gestión una cuenta ya aprobada por Contabilidad, para la
 // aprobación de Susana Sierra -> Miguel Díaz (solo Directivo; normalmente el
 // envío es automático al aprobar Contabilidad).
+// Cadena de firmas de Gerencia en SYD Técnica por proyecto ('*' = por defecto).
+export async function loadAprobadoresGerencia(){
+  const { data, error } = await supabase.from('aprobadores_gerencia').select('project, orden, profile_id, profiles(nombre)');
+  if(error){ console.error('Error cargando aprobadores:', error); return []; }
+  return (data||[]).map(a=>({ project:a.project, orden:a.orden, profile_id:a.profile_id, nombre:a.profiles?.nombre||'' }));
+}
+// decision: 'aprobar' | 'devolver' | 'rechazar' (estos dos con motivo).
+export async function firmarGerencia(cuentaId, decision, motivo){
+  const { data, error } = await supabase.functions.invoke('aprobar-gerencia-tecnica', { body: { cuentaId, decision, motivo } });
+  if(error){
+    let msg = null;
+    try{ msg = (await error.context?.json())?.error; }catch(e){}
+    console.error('Error invocando aprobar-gerencia-tecnica:', error);
+    return { ok:false, error: msg };
+  }
+  return data || { ok:false };
+}
+
 export async function enviarAGerencia(cuentaId){
   const { data, error } = await supabase.functions.invoke('enviar-a-gerencia', { body: { cuentaId } });
   if(error){ console.error('Error invocando enviar-a-gerencia:', error); return false; }

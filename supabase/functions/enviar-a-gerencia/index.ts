@@ -1,11 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { enviarACuentasPorPagar, cadenaAprobadores } from "../_shared/cxp.ts";
 
-// Reenvía a Cuentas por Pagar de SYD Gestión (aprobación de Susana Sierra ->
-// Miguel Díaz) una cuenta de cobro ya aprobada por Contabilidad. Normalmente
-// eso lo hace solo revision-contable-callback; esta función es para un
-// Directivo cuando ese envío falló, y para las cuentas que estaban esperando
-// la aprobación del Directivo en SYD Técnica cuando se quitó ese paso
-// (2026-10-23). La llama el navegador con la sesión del Directivo.
+// Reenvía a Cuentas por Pagar de SYD Gestión una cuenta que ya tiene todas
+// las firmas de Gerencia en SYD Técnica, cuando el envío automático de
+// aprobar-gerencia-tecnica falló. La llama el navegador con la sesión de un
+// Directivo.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,18 +12,6 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 const responder = (cuerpo: unknown, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: corsHeaders });
-
-// Mismo mapa que revision-contable-callback.
-const RESPONSABLES_CONTABLES: Record<string, { auxiliar: string; correo: string }> = {
-  "Aqqua 4": { auxiliar: "Ismael Miranda Almeida", correo: "analistacontable2@sydinversiones.com" },
-  "Citrino": { auxiliar: "Ismael Miranda Almeida", correo: "auxcontable5@sydinversiones.com" },
-  "Aqqua Club": { auxiliar: "Luis Carlos Alcalá Torres", correo: "auxcontable2@sydinversiones.com" },
-  "Itai Equipos": { auxiliar: "Maria Alejandra Lara", correo: "auxcontable2@sydinversiones.com" },
-  "Vivante Parque Residencial": { auxiliar: "Maria Jose Meza", correo: "analistacontable1@sydinversiones.com" },
-  "Atalí Conjunto Campestre": { auxiliar: "Maria Jose Meza", correo: "analistacontable1@sydinversiones.com" },
-  "Vivante Norte": { auxiliar: "Maria Jose Meza", correo: "analistacontable1@sydinversiones.com" },
-  "SYD Inversiones": { auxiliar: "Maria Jose Meza", correo: "analistacontable1@sydinversiones.com" },
-};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -45,31 +32,14 @@ Deno.serve(async (req) => {
     if (!cuenta) return responder({ ok: false, error: "Cuenta no encontrada" }, 404);
     if (cuenta.estado !== "aprobado_contable") return responder({ ok: false, error: "La cuenta no está aprobada por Contabilidad" }, 400);
 
-    const responsable = RESPONSABLES_CONTABLES[cuenta.project] || null;
-    const resp = await fetch(Deno.env.get("APROBACION_CXP_WEBHOOK_URL")!, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-webhook-secret": Deno.env.get("APROBACION_CXP_WEBHOOK_SECRET")! },
-      body: JSON.stringify({
-        referenciaExterna: String(cuenta.id),
-        centroCosto: cuenta.centro_costo || cuenta.project,
-        empresa: cuenta.empresa || null,
-        categoria: cuenta.categoria || null,
-        subcategoria: cuenta.subcategoria || null,
-        concepto: cuenta.concepto,
-        valor: cuenta.valor_final_pagar ?? cuenta.valor,
-        proveedorTercero: cuenta.proveedor,
-        auxiliarContable: responsable?.auxiliar || null,
-        correoRevisor: responsable?.correo || null,
-        soportes: Array.isArray(cuenta.soportes) ? cuenta.soportes : [],
-      }),
-    });
-    if (!resp.ok) {
-      const texto = await resp.text();
-      await supabase.from("cuentas_cobro").update({ aprobacion_cxp_estado: "error", aprobacion_cxp_error: `HTTP ${resp.status}: ${texto.slice(0, 500)}` }).eq("id", cuentaId);
-      return responder({ ok: false, error: texto });
+    const cadena = await cadenaAprobadores(supabase, cuenta.project);
+    if ((cuenta.aprobaciones_gerencia || []).length < cadena.length) {
+      return responder({ ok: false, error: "Faltan firmas de Gerencia en SYD Técnica" }, 400);
     }
-    const historial = [...(cuenta.historial || []), { accion: "Enviado a aprobación de Gerencia (Susana Sierra -> Miguel Díaz)", por: perfil.nombre, fecha: new Date().toISOString() }];
-    await supabase.from("cuentas_cobro").update({ aprobacion_cxp_estado: "enviado", aprobacion_cxp_error: null, historial }).eq("id", cuentaId);
+    const envio = await enviarACuentasPorPagar(supabase, cuenta);
+    if (!envio.ok) return responder({ ok: false, error: envio.error });
+    const historial = [...(cuenta.historial || []), { accion: "Reenviado a Cuentas por Pagar de SYD Gestión", por: perfil.nombre, fecha: new Date().toISOString() }];
+    await supabase.from("cuentas_cobro").update({ historial }).eq("id", cuentaId);
     return responder({ ok: true });
   } catch (e) {
     return responder({ ok: false, error: String(e) });
