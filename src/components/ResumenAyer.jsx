@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { C, BTN_SM } from "../lib/constants.js";
+import { C, BTN_SM, PROYECTOS_SIN_OBRA } from "../lib/constants.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
 // ── RESUMEN DEL ÚLTIMO DÍA REPORTADO (Directivo e Ingeniero) ────────────────────────────
@@ -37,7 +37,7 @@ const fraseActividad = (a) => {
 };
 
 export function construirResumen(reports, proyectosVisibles, nombreUsuario, hoy = isoLocal(new Date())) {
-  const visibles = new Set(proyectosVisibles);
+  const visibles = new Set(proyectosVisibles.filter(p => !PROYECTOS_SIN_OBRA.includes(p)));
   const registros = []; // { project, author, day }
   for (const r of reports) {
     if (r.role !== "Coordinador" || !visibles.has(r.project)) continue;

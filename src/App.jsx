@@ -15,6 +15,7 @@ import { ConsultasPanel } from "./components/ConsultasPanel.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
 import { PanelAdmin } from "./components/PanelAdmin.jsx";
 import { CuentasCobro } from "./components/CuentasCobro.jsx";
+import { PlanSemanal } from "./components/PlanSemanal.jsx";
 import { MiCaja } from "./components/MiCaja.jsx";
 import { sincronizarIngenieros } from "./lib/cajas.js";
 
@@ -49,8 +50,11 @@ export default function App(){
   // dejó un borrador de una semana anterior sin enviar, hay que resolverlo
   // (enviarlo o descartarlo) antes de dejarlo abrir uno nuevo. Si el
   // borrador es de la semana actual, se retoma automáticamente como siempre.
+  // Ingeniero coordinador (ej. Rafael, Iván): un solo usuario que llena los dos informes.
+  const ingCoord = !!usuario?.ingenieroCoordinador;
+  const esCoordinador = usuario?.rol==="Coordinador" || ingCoord;
   const borradorActivo=useMemo(()=>{
-    if(!usuario||usuario.rol!=="Coordinador") return null;
+    if(!usuario||!esCoordinador) return null;
     const propios=reports.filter(r=>r.role==="Coordinador"&&r.coordinadorId===usuario.id&&r.estado==="borrador");
     if(!propios.length) return null;
     return [...propios].sort((a,b)=>a.semana.localeCompare(b.semana))[0];
@@ -60,7 +64,7 @@ export default function App(){
   const borradorSemana = borradorActivo&&borradorActivo.semana===semanaActualStr ? borradorActivo : null;
 
   const yaEnviadoEstaSemana=useMemo(()=>{
-    if(!usuario||usuario.rol!=="Coordinador") return false;
+    if(!usuario||!esCoordinador) return false;
     const semana=getMondayStr();
     return reports.some(r=>r.role==="Coordinador"&&r.coordinadorId===usuario.id&&r.semana===semana&&r.estado==="enviado");
   },[reports,usuario]);
@@ -150,7 +154,7 @@ export default function App(){
     setEditingReport(r);
     setTab("nuevo");
     setSelected(null);
-    if(usuario.rol==="Directivo") setDirectivoForm(r.role==="Ingeniero"?"ing":"coord");
+    if(usuario.rol==="Directivo"||ingCoord) setDirectivoForm(r.role==="Ingeniero"?"ing":"coord");
   };
   const cancelEdit=()=>setEditingReport(null);
 
@@ -188,10 +192,12 @@ export default function App(){
   // a un solo proyecto) no ve "Equipo" — esa pestaña administra el personal de
   // TODA la empresa, no datos de un proyecto puntual.
   const proyectosVisibles = usuario.proyectoAsignado || PROJECTS;
+  const muestraCoord = usuario.rol==="Coordinador" || (ingCoord&&directivoForm==="coord");
+  const muestraIng = usuario.rol==="Ingeniero" && (!ingCoord||directivoForm==="ing");
   const tabs = usuario.rol==="Directivo"
-    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
+    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
-    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
+    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
@@ -306,7 +312,15 @@ export default function App(){
           <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario} destinatarios={destinatarios}/>
         </div>
       )}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&borradorAtrasado&&(
+        {tab==="plan"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<PlanSemanal reports={reports} usuario={usuario}/>}
+        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&!editingReport&&<ResumenAyer reports={reports} proyectosVisibles={usuario.proyectosACargo||proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
+        {tab==="nuevo"&&ingCoord&&!editingReport&&(
+          <div style={{display:"flex",gap:10,marginBottom:20}}>
+            <button onClick={()=>setDirectivoForm("coord")} style={{flex:1,background:directivoForm==="coord"?C.green:C.bgCard2,color:directivoForm==="coord"?"#fff":C.muted,border:`2px solid ${directivoForm==="coord"?C.green:C.border}`,borderRadius:10,padding:"11px 0",cursor:"pointer",fontWeight:700,fontSize:14}}>📋 Informe semanal (diario de obra)</button>
+            <button onClick={()=>setDirectivoForm("ing")} style={{flex:1,background:directivoForm==="ing"?C.blue:C.bgCard2,color:directivoForm==="ing"?"#fff":C.muted,border:`2px solid ${directivoForm==="ing"?C.blue:C.border}`,borderRadius:10,padding:"11px 0",cursor:"pointer",fontWeight:700,fontSize:14}}>🏗️ Informe mensual de Ingeniero</button>
+          </div>
+        )}
+        {tab==="nuevo"&&muestraCoord&&!editingReport&&borradorAtrasado&&(
           <div style={{background:C.danger+"12",border:`1px solid ${C.danger}`,borderRadius:10,padding:"14px 16px",marginBottom:16}}>
             <div style={{color:C.danger,fontWeight:700,fontSize:13,marginBottom:10}}>⚠️ Tienes un informe de la semana del {borradorAtrasado.semana} sin enviar. Debes enviarlo (aunque sea tarde) o descartarlo antes de crear uno nuevo.</div>
             <div style={{display:"flex",gap:10}}>
@@ -315,14 +329,13 @@ export default function App(){
             </div>
           </div>
         )}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&!editingReport&&!borradorSemana&&!borradorAtrasado&&(
+        {tab==="nuevo"&&muestraCoord&&!editingReport&&!borradorSemana&&!borradorAtrasado&&(
           yaEnviadoEstaSemana
             ? <div style={{background:C.green+"18",border:`1px solid ${C.green}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.green,fontWeight:600,fontSize:13}}>✅ Ya enviaste el informe de esta semana. Si necesitas corregir algo, hazlo desde "Ver Informes".</div>
             : <div style={{background:C.warn+"18",border:`1px solid ${C.warn}`,borderRadius:10,padding:"10px 14px",marginBottom:16,color:C.warn,fontWeight:600,fontSize:13}}>📌 Recordatorio: aún no envías el informe semanal. No olvides enviarlo antes de que termine la semana.</div>
         )}
-        {tab==="nuevo"&&usuario.rol==="Coordinador"&&(!borradorAtrasado||editingReport)&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
-        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&!editingReport&&<ResumenAyer reports={reports} proyectosVisibles={proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
-        {tab==="nuevo"&&usuario.rol==="Ingeniero"&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
+        {tab==="nuevo"&&muestraCoord&&(!borradorAtrasado||editingReport)&&<CoordForm onSubmit={submit} editingReport={editingReport||borradorSemana} onCancelEdit={editingReport?cancelEdit:null} usuario={usuario}/>}
+        {tab==="nuevo"&&muestraIng&&<IngForm onSubmit={submit} editingReport={editingReport} onCancelEdit={cancelEdit} usuario={usuario} reports={reports}/>}
         {tab==="nuevo"&&usuario.rol==="Directivo"&&(
           <div>
             {!editingReport&&(

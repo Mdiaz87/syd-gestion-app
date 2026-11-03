@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip as RcTooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { C, SEM_COLOR, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, MESES } from "../lib/constants.js";
+import { C, SEM_COLOR, PROJECTS, PROYECTOS_SIN_OBRA, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, MESES } from "../lib/constants.js";
 import { fmt, semaforo } from "../lib/helpers.js";
 import { calcularRecordatorios, lunesDe, etiquetaSemana } from "../lib/recordatorios.js";
-import { loadObligacionesInformes } from "../lib/api.js";
+import { loadObligacionesInformes, loadPlanesSemanales } from "../lib/api.js";
+import { alertasPlanes, hoyColombia } from "../../supabase/functions/_shared/plan-semanal.js";
 import { Badge, Bar } from "./ui.jsx";
 
 export function Dashboard({reports,presupuestos,usuario}){
@@ -11,12 +12,32 @@ export function Dashboard({reports,presupuestos,usuario}){
   // proyecto) solo ve ese proyecto en todo el Dashboard, en vez de los 12 —
   // la protección real ya la da RLS (reports/presupuestos ya llegan filtrados),
   // esto es para no mostrar tarjetas vacías de proyectos que no le corresponden.
-  const proyectosVisibles = usuario?.proyectoAsignado || PROJECTS;
+  const todosVisibles = usuario?.proyectoAsignado || PROJECTS;
+  // Citrino y Aqqua 4 se vendieron: fuera de tarjetas y alertas, con una nota.
+  const proyectosVisibles = todosVisibles.filter(p=>!PROYECTOS_SIN_OBRA.includes(p));
+  const sinObraVisibles = todosVisibles.filter(p=>PROYECTOS_SIN_OBRA.includes(p));
   const byProj={};
   proyectosVisibles.forEach(p=>{byProj[p]=reports.filter(r=>r.project===p);});
 
   const [obligaciones,setObligaciones]=useState(null);
   useEffect(()=>{ loadObligacionesInformes().then(setObligaciones); },[]);
+  const [planes,setPlanes]=useState([]);
+  useEffect(()=>{ loadPlanesSemanales().then(setPlanes); },[]);
+  const planesAlerta=useMemo(()=>{
+    const res=[];
+    for(const a of alertasPlanes(planes,reports,obligaciones||[],proyectosVisibles,hoyColombia())){
+      if(a.entrega.estado==="vencido") res.push({proj:a.project,color:C.danger,texto:`🔴 El ingeniero no envió el plan de esta semana (vencía el ${a.entrega.vence})`});
+      const cur=a.cotejoActual;
+      if(cur&&cur.enRiesgo) res.push({proj:a.project,color:C.warn,texto:`⚠️ ${cur.enRiesgo} actividad${cur.enRiesgo===1?"":"es"} en riesgo esta semana${cur.causas.length?` · ${cur.causas.join(", ")}`:""}`});
+      const pre=a.cotejoPrevio;
+      if(pre&&(pre.incumplidas||pre.parciales)){
+        const faltas=pre.filas.filter(f=>f.estado==="incumplida"||f.estado==="parcial");
+        const sinMotivo=faltas.filter(f=>!f.motivo).length;
+        res.push({proj:a.project,color:C.danger,texto:`🔴 Semana pasada: ${pre.cumplidas} de ${pre.total} cumplidas. No se completó: ${faltas.map(f=>f.actividad).join(", ")}${pre.causas.length?` · ${pre.causas.join(", ")}`:""}${sinMotivo?` · ${sinMotivo} sin explicar`:""}`});
+      }
+    }
+    return res;
+  },[planes,reports,obligaciones]);
   const recordatoriosTodos=useMemo(()=>calcularRecordatorios(reports, obligaciones||[], proyectosVisibles),[reports,obligaciones]);
   const recordatorios=recordatoriosTodos.filter(r=>r.coordPendiente||r.ingAtrasado);
   const enCurso=recordatoriosTodos.filter(r=>r.diasSemanaEnCurso!==null);
@@ -45,6 +66,7 @@ export function Dashboard({reports,presupuestos,usuario}){
   const alertasSobrecosto=useMemo(()=>{
     const alerts=[];
     Object.entries(presByProject).forEach(([proj,cats])=>{
+      if(PROYECTOS_SIN_OBRA.includes(proj)) return;
       const acum=cumByProject[proj]||{};
       cats.forEach(c=>{
         const ejec=acum[c.categoria]||0;
@@ -117,6 +139,23 @@ export function Dashboard({reports,presupuestos,usuario}){
               Semana en curso ({etiquetaSemana(lunesDe())}, se entrega el lunes 12 m): {enCurso.map(r=>`${r.proj} ${r.diasSemanaEnCurso} día${r.diasSemanaEnCurso===1?"":"s"}`).join(" · ")}
             </div>
           )}
+        </div>
+      )}
+
+      {sinObraVisibles.length>0&&(
+        <div style={{color:C.muted,fontSize:12,marginBottom:16}}>{sinObraVisibles.join(" y ")}: vendidos con SYD Universal. Solo comisiones, sin compromiso de informes ni alertas.</div>
+      )}
+
+      {planesAlerta.length>0&&(
+        <div style={{background:C.danger+"0c",border:`1px solid ${C.danger}44`,borderRadius:12,padding:16,marginBottom:24}}>
+          <div style={{color:C.danger,fontWeight:800,fontSize:14,marginBottom:10}}>🗓️ Plan semanal de ingenieros (detalle en la pestaña Plan semanal)</div>
+          <div style={{display:"grid",gap:6}}>
+            {planesAlerta.map((a,i)=>(
+              <div key={i} style={{background:C.bgCard,borderRadius:8,padding:"8px 12px",fontSize:12}}>
+                <b style={{color:C.text}}>{a.proj}</b> <span style={{color:a.color,marginLeft:6}}>{a.texto}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

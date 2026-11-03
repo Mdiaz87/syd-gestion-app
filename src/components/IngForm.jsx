@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS, MESES } from "../lib/constants.js";
-import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite } from "../lib/helpers.js";
+import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite, proyectosDeInformes } from "../lib/helpers.js";
 import { loadPresupuestoProyecto, savePresupuestoProyecto, verificarAlertasPresupuesto } from "../lib/api.js";
 import { Card, SectionTitle, PhotoUpload, CurrencyInput, Bar } from "./ui.jsx";
 import { GraficasFinanciero } from "./GraficasFinanciero.jsx";
@@ -10,8 +10,9 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const initial = editingReport;
   const initFrentes = (proj) => (FRENTES_POR_PROYECTO[proj]||FRENTES_MASTER).map(nombre=>emptyFrente(nombre));
 
-  const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
-  const [project,setProject]=useState(initial?.project||usuario.proyectoAsignado?.[0]||PROJECTS[0]);
+  const proyectosDisponibles = initial?.project && !proyectosDeInformes(usuario).includes(initial.project)
+    ? [initial.project, ...proyectosDeInformes(usuario)] : proyectosDeInformes(usuario);
+  const [project,setProject]=useState(initial?.project||proyectosDisponibles[0]);
   const author = initial?.author || usuario.nombre;
   const [type,setType]=useState(initial?.type||"mensual");
   const now=new Date();
@@ -29,7 +30,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
   const [avObra,setAvObra]=useState(initial?.avanceObra||0);
   const [avRec,setAvRec]=useState(initial?.avanceRecursos||0);
   const [avPlan,setAvPlan]=useState(initial?.avancePlaneado??"");
-  const [frentes,setFrentes]=useState(()=>initial?.frentes||initFrentes(initial?.project||PROJECTS[0]));
+  const [frentes,setFrentes]=useState(()=>initial?.frentes||initFrentes(initial?.project||proyectosDisponibles[0]));
   const [financiero,setFinanciero]=useState(initial?.financiero||emptyFinanciero());
   const [tramites,setTramites]=useState(initial?.tramites||emptyTramite());
   const [resumen,setResumen]=useState(initial?.resumen||"");

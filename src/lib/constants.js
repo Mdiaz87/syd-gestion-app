@@ -35,6 +35,9 @@ export const TEAM = {
 export const MACHINES = ["Minicargador","Guadaña","Tractor","Retroexcavadora","Cargador","Pajarita","Motobomba","Motoniveladora","Marmara","Motocarro","Volqueta Sencilla","Volqueta Doble Troque","Grúa","Bulldozer","Motosierra","Planta Eléctrica"];
 export const CLIMA_OPTS = ["Soleado","Nublado","Lluvia","Parcialmente Nublado"];
 export const ACTIVIDADES_CATALOGO = ["Limpieza de vías","Limpieza zona puente","Limpieza general","Movimiento de tierra","Conformación de subrasante","Excavación mecánica","Relleno y compactación","Corte y nivelación","Reemplazo de material","Adecuación zona puente","Compactación de vía principal","Recepción de zahorra","Construcción de bordillos","Estabilización química","Riego y corte de terreno","Transporte de material interno","Otro"];
+// Vendidos con SYD Universal (2026-11): solo quedan las comisiones, sin
+// informes ni alertas. Siguen disponibles en Cuentas de Cobro y en el historial.
+export const PROYECTOS_SIN_OBRA = ["Citrino","Aqqua 4"];
 export const UNIDADES = ["m³","m²","ml","horas","viajes","días","und","Otro"];
 // Empresa -> Centro de Costo -> Categoria -> [Subcategorias] (Cuentas de Cobro, 19/08, desde DESPLEGABLE.xlsx).
 export const EMPRESAS_CENTROS_COSTO = {

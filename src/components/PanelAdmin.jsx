@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { C, INP, BTN_SM } from "../lib/constants.js";
+import { C, INP, BTN_SM, PROJECTS, PROYECTOS_SIN_OBRA } from "../lib/constants.js";
 import { crearUsuario, editarUsuario, setUsuarioActivo, resetearPinDeOtro, loadContactosNotificacion, guardarContactoNotificacion, loadObligacionesInformes, guardarObligacionInforme } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
 
@@ -21,12 +21,15 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
     loadObligacionesInformes().then(setObligaciones);
   },[]);
 
-  const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);setEditCorreo(correos[u.id]||"");};
+  const [editIngCoord,setEditIngCoord]=useState(false);
+  const [editACargo,setEditACargo]=useState([]);
+  const startEdit=u=>{setEditando(u.id);setEditNombre(u.nombre);setEditRol(u.rol);setEditCorreo(correos[u.id]||"");setEditIngCoord(!!u.ingeniero_coordinador);setEditACargo(u.proyectos_a_cargo||[]);};
   const saveEdit=async u=>{
     const correo=editCorreo.trim();
     if(correo&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)){ alert("⚠️ El correo no parece válido."); return; }
-    const ok=await editarUsuario(u.id,editNombre,editRol);
-    if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,nombre:editNombre,rol:editRol}:x));
+    const extra={ingeniero_coordinador:editRol==="Ingeniero"&&editIngCoord,proyectos_a_cargo:editRol==="Directivo"||!editACargo.length?null:editACargo};
+    const ok=await editarUsuario(u.id,editNombre,editRol,extra);
+    if(ok) onUsuariosChange(usuarios.map(x=>x.id===u.id?{...x,nombre:editNombre,rol:editRol,...extra}:x));
     if(correo!==(correos[u.id]||"")){
       const okCorreo=await guardarContactoNotificacion(u.id,correo);
       if(okCorreo) setCorreos(c=>{const n={...c}; if(correo) n[u.id]=correo; else delete n[u.id]; return n;});
@@ -37,7 +40,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
   const cambiarObligacion=async(o,cambios)=>{
     const nueva={...o,...cambios};
     setObligaciones(os=>os.map(x=>x.project===o.project?nueva:x));
-    const ok=await guardarObligacionInforme(o.project,{coord_semanal:nueva.coord_semanal,ing_mensual:nueva.ing_mensual,ing_mensual_desde:nueva.ing_mensual_desde||null,coord_responsable:nueva.coord_responsable||null,ing_responsable:nueva.ing_responsable||null});
+    const ok=await guardarObligacionInforme(o.project,{coord_semanal:nueva.coord_semanal,ing_mensual:nueva.ing_mensual,ing_mensual_desde:nueva.ing_mensual_desde||null,plan_semanal:nueva.plan_semanal,coord_responsable:nueva.coord_responsable||null,ing_responsable:nueva.ing_responsable||null});
     if(!ok){ alert("⚠️ No se pudo guardar el cambio."); setObligaciones(os=>os.map(x=>x.project===o.project?o:x)); }
   };
   const toggleActivo=async u=>{
@@ -125,6 +128,23 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                     {["Coordinador","Ingeniero","Directivo"].map(r=><option key={r}>{r}</option>)}
                   </select>
                 </div>
+                {editRol==="Ingeniero"&&(
+                  <label style={{display:"flex",gap:8,alignItems:"center",fontSize:13,marginBottom:10,cursor:"pointer"}}>
+                    <input type="checkbox" checked={editIngCoord} onChange={e=>setEditIngCoord(e.target.checked)}/> Ingeniero coordinador (también llena el informe semanal de obra)
+                  </label>
+                )}
+                {editRol!=="Directivo"&&(
+                  <div style={{marginBottom:10}}>
+                    <label style={{color:C.muted,fontSize:12}}>Proyectos a cargo (limita sus formularios de informes)</label>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",marginTop:4}}>
+                      {PROJECTS.filter(p=>!PROYECTOS_SIN_OBRA.includes(p)).map(p=>(
+                        <label key={p} style={{display:"flex",gap:5,alignItems:"center",fontSize:12,cursor:"pointer"}}>
+                          <input type="checkbox" checked={editACargo.includes(p)} onChange={e=>setEditACargo(l=>e.target.checked?[...l,p]:l.filter(x=>x!==p))}/> {p}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={{marginBottom:10}}>
                   <label style={{color:C.muted,fontSize:12}}>Correo para recordatorios (opcional)</label>
                   <input style={INP} type="email" value={editCorreo} onChange={e=>setEditCorreo(e.target.value)} placeholder="nombre@correo.com"/>
@@ -141,7 +161,8 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
                   {!u.activo&&<span style={{color:C.muted,fontSize:12,marginLeft:8}}>(inactivo)</span>}
                   <div style={{color:correos[u.id]?C.muted:C.warn,fontSize:12,marginTop:2}}>{correos[u.id]?`✉️ ${correos[u.id]}`:"✉️ Sin correo para recordatorios"}</div>
                   <div style={{marginTop:4}}>
-                    <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px"}}>{u.rol}</span>
+                    <span style={{background:ROL_C[u.rol]+"18",color:ROL_C[u.rol],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600,letterSpacing:"0.1px"}}>{u.ingeniero_coordinador?"Ingeniero coordinador":u.rol}</span>
+                    {u.proyectos_a_cargo?.length>0&&<span style={{color:C.muted,fontSize:12,marginLeft:8}}>{u.proyectos_a_cargo.join(", ")}</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -166,7 +187,7 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
       <div style={{display:"grid",gap:6}}>
         {obligaciones.map(o=>(
           <div key={o.project} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",fontSize:13}}>
-            <span style={{fontWeight:600,color:C.text}}>{o.project}</span>
+            <span style={{fontWeight:600,color:C.text}}>{o.project}{o.nota&&<div style={{fontWeight:400,color:C.muted,fontSize:11}}>{o.nota}</div>}</span>
             <span style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
               <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
                 <input type="checkbox" checked={o.coord_semanal} onChange={e=>cambiarObligacion(o,{coord_semanal:e.target.checked})}/> Semanal Coordinador
@@ -175,7 +196,10 @@ export function PanelAdmin({usuarios, onUsuariosChange, usuario}){
               <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
                 <input type="checkbox" checked={o.ing_mensual} onChange={e=>cambiarObligacion(o,{ing_mensual:e.target.checked})}/> Mensual Ingeniero
               </label>
-              {o.ing_mensual&&selectResponsable(o,"ing_responsable","Ingeniero")}
+              <label style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer"}}>
+                <input type="checkbox" checked={!!o.plan_semanal} onChange={e=>cambiarObligacion(o,{plan_semanal:e.target.checked})}/> Plan semanal
+              </label>
+              {(o.ing_mensual||o.plan_semanal)&&selectResponsable(o,"ing_responsable","Ingeniero")}
               {o.ing_mensual&&(
                 <label style={{display:"flex",gap:6,alignItems:"center",color:C.muted}}>
                   desde <input type="month" value={o.ing_mensual_desde||""} onChange={e=>cambiarObligacion(o,{ing_mensual_desde:e.target.value||null})} style={{...INP,padding:"2px 6px",width:150}}/>

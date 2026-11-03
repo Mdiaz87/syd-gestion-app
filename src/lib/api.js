@@ -53,7 +53,7 @@ export async function saveDestinatarios(project, emails){
 // pantalla de login no diga "no hay usuarios configurados" ante un simple
 // corte de red.
 export async function loadUsuarios(){
-  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin,proyecto_asignado').order('nombre');
+  const { data, error } = await supabase.from('profiles').select('id,nombre,rol,activo,email,legacy_id,es_super_admin,proyecto_asignado,ingeniero_coordinador,proyectos_a_cargo').order('nombre');
   if(error){ console.error('Error cargando usuarios:', error); return null; }
   return data || [];
 }
@@ -61,8 +61,9 @@ export async function loadUsuarios(){
 // `profiles` (snake_case) — usado tanto en login directo como al restaurar
 // sesión, para que ambos caminos queden siempre consistentes.
 export function shapeUsuario(profile){
-  const { id, nombre, rol, activo, es_super_admin, proyecto_asignado } = profile;
-  return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin, proyectoAsignado: proyecto_asignado || null };
+  const { id, nombre, rol, activo, es_super_admin, proyecto_asignado, ingeniero_coordinador, proyectos_a_cargo } = profile;
+  return { id, nombre, rol, activo, esSuperAdmin: !!es_super_admin, proyectoAsignado: proyecto_asignado || null,
+    ingenieroCoordinador: !!ingeniero_coordinador, proyectosACargo: proyectos_a_cargo || null };
 }
 // Antes de intentar el login se consulta el bloqueo por fuerza bruta
 // (RPC server-side, no depende de nada guardado en el navegador — ver
@@ -132,8 +133,8 @@ export async function crearUsuario(nombre, rol){
   if(profileError){ console.error('Error creando perfil:', profileError); return null; }
   return { id, nombre, rol, pin };
 }
-export async function editarUsuario(id, nombre, rol){
-  const { error } = await supabase.from('profiles').update({ nombre, rol }).eq('id', id);
+export async function editarUsuario(id, nombre, rol, extra={}){
+  const { error } = await supabase.from('profiles').update({ nombre, rol, ...extra }).eq('id', id);
   if(error){ console.error('Error editando usuario:', error); return false; }
   return true;
 }
@@ -390,6 +391,20 @@ export async function guardarContactoNotificacion(profileId, email){
     ? await supabase.from('contactos_notificacion').upsert({ profile_id: profileId, email: limpio, updated_at: new Date().toISOString() })
     : await supabase.from('contactos_notificacion').delete().eq('profile_id', profileId);
   if(error){ console.error('Error guardando correo:', error); return false; }
+  return true;
+}
+
+// Plan semanal de los ingenieros (se coteja con los registros de coordinadores).
+export async function loadPlanesSemanales(){
+  const desde = new Date(Date.now()-120*86400000).toISOString().slice(0,10);
+  const { data, error } = await supabase.from('planes_semanales').select('*').gte('semana', desde).order('semana', {ascending:false});
+  if(error){ console.error('Error cargando planes semanales:', error); return []; }
+  return data || [];
+}
+export async function guardarPlanSemanal(plan){
+  const { id, created_at, ...resto } = plan;
+  const { error } = await supabase.from('planes_semanales').upsert({ ...resto, updated_at: new Date().toISOString() }, { onConflict: 'project,semana' });
+  if(error){ console.error('Error guardando plan semanal:', error); return false; }
   return true;
 }
 

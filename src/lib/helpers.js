@@ -1,9 +1,15 @@
-import { ITEMS_PREOP, ITEMS_OP, TRAMITES } from "./constants.js";
+import { ITEMS_PREOP, ITEMS_OP, TRAMITES, PROJECTS, PROYECTOS_SIN_OBRA } from "./constants.js";
 
 export const fmt = n => n ? new Intl.NumberFormat("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0}).format(+n) : "-";
 
 // Lunes de esta semana en hora LOCAL. Antes usaba toISOString() (UTC): en
 // Colombia, después de las 7 p.m. la fecha se corría al día siguiente.
+// Proyectos en los que esta persona puede llenar informes.
+export const proyectosDeInformes = (usuario) => {
+  const base = usuario?.proyectosACargo?.length ? usuario.proyectosACargo : (usuario?.proyectoAsignado || PROJECTS);
+  return base.filter(p => !PROYECTOS_SIN_OBRA.includes(p));
+};
+
 export function getMondayStr(){
   const d=new Date();
   d.setDate(d.getDate()-((d.getDay()+6)%7));

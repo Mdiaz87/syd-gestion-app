@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { alertasPlanes, hoyColombia } from "../_shared/plan-semanal.js";
 
 // Recordatorios por correo de informes vencidos. La llama pg_cron cada 2 días
 // a las 7 a.m. (Colombia) con x-cron-secret. Se despliega con --no-verify-jwt.
@@ -9,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // - Coordinador: semana (lunes) vence el lunes siguiente 12 m; la semana se
 //   toma de las fechas de los días del informe.
 // - Ingeniero: mes anterior, del 1 al 5; ing_mensual_desde = primer mes exigido.
+// - Plan semanal: lunes (martes si es festivo); ver _shared/plan-semanal.js.
 //
 // El correo sale por el Apps Script de SYD (tipoAlerta recordatorio_informes),
 // autenticado con GAS_RECORDATORIOS_SECRET.
@@ -29,8 +31,8 @@ const corta = (s: string) => { const d = deIso(s); return `${d.getUTCDate()} ${M
 const etiquetaSemana = (lunes: string) => `${corta(lunes)} – ${corta(sumarDias(lunes, 6))}`;
 
 type Report = { role?: string; project?: string; type?: string; mes?: string; estado?: string; semana?: string; author?: string; coordinadorId?: string; date?: string; days?: { date?: string }[]; history?: { uid?: string }[] };
-type Obligacion = { project: string; coord_semanal: boolean; ing_mensual: boolean; ing_mensual_desde: string | null; coord_responsable: string | null; ing_responsable: string | null };
-type Pendiente = { project: string; tipo: "coord" | "ing"; detalle: string; responsableId: string | null };
+type Obligacion = { project: string; coord_semanal: boolean; ing_mensual: boolean; ing_mensual_desde: string | null; coord_semanal_desde?: string | null; coord_responsable: string | null; ing_responsable: string | null };
+type Pendiente = { project: string; tipo: "coord" | "ing" | "plan"; detalle: string; responsableId: string | null };
 
 const coincideMes = (texto: string | undefined, anio: number, mes: number) => {
   if (!texto) return false;
@@ -61,7 +63,7 @@ function calcularPendientes(reports: Report[], obligaciones: Obligacion[]): Pend
 
   const res: Pendiente[] = [];
   for (const o of obligaciones) {
-    if (o.coord_semanal) {
+    if (o.coord_semanal && (!o.coord_semanal_desde || semana >= o.coord_semanal_desde)) {
       const del = reports.filter(r => r.role === "Coordinador" && r.project === o.project);
       const semanasDe = (r: Report) => new Set((r.days || []).filter(d => d.date).map(d => lunesDe(d.date!)));
       const enviado = del.some(r => r.estado === "enviado" && (semanasDe(r).has(semana) || (r.semana === semana && !semanasDe(r).size)));
@@ -87,14 +89,37 @@ Deno.serve(async (req) => {
     const dry = new URL(req.url).searchParams.get("dry") === "1";
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const [{ data: filas }, { data: obligaciones }, { data: perfiles }, { data: contactos }] = await Promise.all([
+    const [{ data: filas }, { data: obligaciones }, { data: perfiles }, { data: contactos }, { data: planes }] = await Promise.all([
       db.from("reports").select("data"),
       db.from("obligaciones_informes").select("*"),
       db.from("profiles").select("id,nombre,rol,activo,email_notificaciones,proyecto_asignado"),
       db.from("contactos_notificacion").select("profile_id,email"),
+      db.from("planes_semanales").select("*").gte("semana", sumarDias(iso(ahoraColombia()), -21)),
     ]);
     const reports = (filas || []).map((f: { data: Report }) => f.data);
     const pendientes = calcularPendientes(reports, (obligaciones || []) as Obligacion[]);
+
+    // Plan semanal: si no se envió, o si la semana pasada no se completó y falta explicar por qué.
+    const lineasPlan: string[] = [];
+    for (const a of alertasPlanes(planes || [], reports, obligaciones || [], null, hoyColombia())) {
+      if (a.entrega.estado === "vencido") {
+        pendientes.push({ project: a.project, tipo: "plan", detalle: `plan semanal de actividades, semana ${etiquetaSemana(a.semana)}`, responsableId: a.responsableId });
+      }
+      const pre = a.cotejoPrevio;
+      if (pre && (pre.incumplidas || pre.parciales)) {
+        // deno-lint-ignore no-explicit-any
+        const faltas = pre.filas.filter((f: any) => f.estado === "incumplida" || f.estado === "parcial");
+        // deno-lint-ignore no-explicit-any
+        const sinMotivo = faltas.filter((f: any) => !f.motivo);
+        if (sinMotivo.length) {
+          // deno-lint-ignore no-explicit-any
+          pendientes.push({ project: a.project, tipo: "plan", detalle: `explicar en Plan semanal por qué no se completó, semana ${etiquetaSemana(a.anterior)}: ${sinMotivo.map((f: any) => f.actividad).join(", ")}`, responsableId: a.responsableId });
+        }
+        // deno-lint-ignore no-explicit-any
+        const detalle = faltas.map((f: any) => `${f.actividad}${f.pct != null ? ` (${f.pct}%)` : ""}${f.motivo ? `: ${f.motivo}` : ""}`).join("; ");
+        lineasPlan.push(`${a.project}, semana ${etiquetaSemana(a.anterior)}: ${pre.cumplidas} de ${pre.total} cumplidas. No se completó: ${detalle}.${pre.causas.length ? ` Registros: ${pre.causas.join(", ")}.` : ""}`);
+      }
+    }
 
     const perfil = new Map((perfiles || []).map((p: { id: string }) => [p.id, p]));
     const correoDe = new Map((contactos || []).map((c: { profile_id: string; email: string }) => [c.profile_id, c.email]));
@@ -121,12 +146,12 @@ Deno.serve(async (req) => {
     // proyecto, ej. cuentas externas, no reciben el de toda la empresa).
     const directivos = (perfiles || []).filter((p: { rol: string; activo: boolean; proyecto_asignado: string[] | null }) => p.rol === "Directivo" && p.activo && !p.proyecto_asignado?.length)
       .map((p: { id: string; email_notificaciones?: string }) => correoDe.get(p.id) || p.email_notificaciones).filter(Boolean) as string[];
-    if (pendientes.length && directivos.length) {
+    if ((pendientes.length || lineasPlan.length) && directivos.length) {
       const nombreDe = (p: Pendiente) => p.responsableId ? String((perfil.get(p.responsableId) as { nombre?: string })?.nombre || "sin nombre") : "sin responsable";
       correos.push({
         destinatarios: [...new Set(directivos)],
-        asunto: `SYD — ${pendientes.length} informe${pendientes.length === 1 ? "" : "s"} vencido${pendientes.length === 1 ? "" : "s"}`,
-        html: `<p>Informes vencidos a la fecha:</p>${lista(pendientes.map(p => `${p.project}: ${p.detalle} — ${nombreDe(p)}${sinCorreo.includes(p) ? " (no se le pudo avisar: sin correo registrado)" : ""}`))}<p>Los responsables con correo registrado ya recibieron su recordatorio. Puedes asignar responsables y correos en <b>Equipo</b>.</p>`,
+        asunto: `SYD — ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"} de informes y planes`,
+        html: `<p>Pendientes a la fecha:</p>${lista(pendientes.map(p => `${p.project}: ${p.detalle} — ${nombreDe(p)}${sinCorreo.includes(p) ? " (no se le pudo avisar: sin correo registrado)" : ""}`))}<p>Los responsables con correo registrado ya recibieron su recordatorio. Puedes asignar responsables y correos en <b>Equipo</b>.</p>${lineasPlan.length ? `<p><b>Plan semanal vs. lo registrado por los coordinadores:</b></p>${lista(lineasPlan)}` : ""}`,
       });
     }
 

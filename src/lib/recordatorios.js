@@ -60,12 +60,13 @@ export function calcularRecordatorios(reports, obligaciones, proyectosVisibles, 
     if (!visibles.has(o.project)) continue;
     const r = { proj: o.project, coordPendiente: false, ingAtrasado: false, semana, semanaEtiqueta: etiquetaSemana(semana), mesObjetivo: mes.etiqueta, diasSemanaEnCurso: null };
     if (o.coord_semanal) {
+      const exigeSemana = !o.coord_semanal_desde || semana >= o.coord_semanal_desde;
       // La semana se toma de las FECHAS de los días, no del campo `semana`:
       // ese guarda la semana en que se creó el informe, y quien llena tarde
       // (ej. el lunes, la semana anterior) queda con la etiqueta corrida.
       const delProyecto = reports.filter(x => x.role === "Coordinador" && x.project === o.project);
       const semanasDe = (x) => new Set((x.days || []).filter(d => d.date).map(d => lunesDe(new Date(`${d.date}T00:00:00`))));
-      r.coordPendiente = !delProyecto.some(x => x.estado === "enviado" && (semanasDe(x).has(semana) || (x.semana === semana && !semanasDe(x).size)));
+      r.coordPendiente = exigeSemana && !delProyecto.some(x => x.estado === "enviado" && (semanasDe(x).has(semana) || (x.semana === semana && !semanasDe(x).size)));
       const fechasEnCurso = new Set(delProyecto.flatMap(x => (x.days || [])
         .filter(d => d.date && d.date >= lunesActual && (d.activities || []).some(a => a.actividad)).map(d => d.date)));
       r.diasSemanaEnCurso = fechasEnCurso.size;
