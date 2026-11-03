@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { C, INP, BTN_SM, ACTIVIDADES_CATALOGO, UNIDADES, ETAPAS } from "../lib/constants.js";
 import { loadPlanesSemanales, guardarPlanSemanal, loadObligacionesInformes } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
-import { cotejarPlan, revisarPlan, estadoEntrega, hoyColombia, lunesDeFecha, sumarDias, esFestivo } from "../../supabase/functions/_shared/plan-semanal.js";
+import { actividadesRecientes, cotejarPlan, revisarPlan, estadoEntrega, hoyColombia, lunesDeFecha, sumarDias, esFestivo } from "../../supabase/functions/_shared/plan-semanal.js";
 
 // ── PLAN SEMANAL DE LOS INGENIEROS ────────────────────────────────────────────
 // El ingeniero propone el lunes (martes si el lunes es festivo) lo que se hará
@@ -31,7 +31,7 @@ const Pill = ({ info }) => <span style={{ background: info.color + "18", color: 
 const nuevaFila = () => ({ id: crypto.randomUUID(), actividad: "", etapa: "General", meta: "", unidad: UNIDADES[0], equipo: "", observaciones: "", motivo: "" });
 const OTRA = "__otra__";
 
-function Editor({ plan, project, semana, usuario, onGuardado }) {
+function Editor({ plan, project, semana, usuario, sugerencias, onGuardado }) {
   const [filas, setFilas] = useState(plan?.actividades?.length ? plan.actividades : [nuevaFila()]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -58,6 +58,7 @@ function Editor({ plan, project, semana, usuario, onGuardado }) {
     <Card style={{ marginBottom: 16 }}>
       <SectionTitle>Actividades planeadas — {project}</SectionTitle>
       <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Usa el mismo nombre de actividad que usan los coordinadores: así el cotejo es automático. Al enviarlo, el plan queda fijo.</div>
+      <datalist id="actividades-obra">{sugerencias.map(s => <option key={s} value={s} />)}</datalist>
       <div style={{ display: "grid", gap: 10 }}>
         {filas.map(f => {
           const delCatalogo = ACTIVIDADES_CATALOGO.includes(f.actividad);
@@ -70,7 +71,7 @@ function Editor({ plan, project, semana, usuario, onGuardado }) {
                   {ACTIVIDADES_CATALOGO.filter(a => a !== "Otro").map(a => <option key={a}>{a}</option>)}
                   <option value={OTRA}>Otra…</option>
                 </select>
-                {!delCatalogo && (f.__otra || f.actividad) && <input style={{ ...INP, marginTop: 4 }} placeholder="Escribe la actividad" value={f.actividad} onChange={e => set(f.id, "actividad", e.target.value)} />}
+                {!delCatalogo && (f.__otra || f.actividad) && <input style={{ ...INP, marginTop: 4 }} list="actividades-obra" placeholder="Escribe o escoge la que usa el coordinador" value={f.actividad} onChange={e => set(f.id, "actividad", e.target.value)} />}
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11 }}>Etapa</label>
@@ -276,7 +277,7 @@ export function PlanSemanal({ reports, usuario }) {
       {proyecto && (
         <>
           {(!enviado || reabierto) && puedeEscribir && !(semana < lunesDeFecha(hoy) && !plan)
-            ? <Editor key={`${proyecto}-${semana}-${plan?.updated_at || ""}`} plan={plan} project={proyecto} semana={semana} usuario={usuario} onGuardado={(t) => { recargar(); mostrarAviso(t); }} />
+            ? <Editor key={`${proyecto}-${semana}-${plan?.updated_at || ""}`} plan={plan} project={proyecto} semana={semana} usuario={usuario} sugerencias={actividadesRecientes(reports, proyecto, hoy)} onGuardado={(t) => { recargar(); mostrarAviso(t); }} />
             : !plan && <Card style={{ marginBottom: 16 }}><div style={{ color: C.muted, fontSize: 13 }}>{proyecto}: no se envió plan esa semana.</div></Card>}
           {enviado && cotejo && !esFutura && <Cotejo plan={plan} cotejo={cotejo} puedeEscribir={puedeEscribir} onMotivo={guardarMotivo} />}
           {revision && <Revision key={plan.updated_at} plan={plan} revision={revision} usuario={usuario} onVeredicto={guardarVeredicto} />}

@@ -48,13 +48,16 @@ export function estadoEntrega(plan, semana, hoy) {
 // ── Coincidencia de actividades ───────────────────────────────────────────────
 export const normalizar = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const VACIAS = new Set(["de", "del", "la", "el", "los", "las", "y", "en", "a", "para", "con", "al"]);
-const palabras = (t) => normalizar(t).split(" ").filter(p => p && !VACIAS.has(p));
+// Singular y plural cuentan igual: "ENTREGA DE LOTE" = "ENTREGA DE LOTES".
+const singular = (p) => p.length > 4 && p.endsWith("es") && !p.endsWith("ies") ? p.slice(0, -2) : p.length > 3 && p.endsWith("s") ? p.slice(0, -1) : p;
+const palabras = (t) => normalizar(t).split(" ").filter(p => p && !VACIAS.has(p)).map(singular);
 export function mismaActividad(a, b) {
   const na = normalizar(a), nb = normalizar(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
   const pa = palabras(a), pb = palabras(b);
   if (!pa.length || !pb.length) return false;
+  if (pa.join(" ") === pb.join(" ")) return true;
   const [corta, larga] = pa.length <= pb.length ? [pa, pb] : [pb, pa];
   return corta.filter(p => larga.includes(p)).length === corta.length && corta.length >= 2;
 }
@@ -191,6 +194,16 @@ export function revisarPlan(plan, reports, planAnterior, hoy) {
     }
   }
   return { avisos, adecuado: !avisos.some(a => a.nivel !== "info") };
+}
+
+// Nombres que usan los coordinadores en esta obra, para sugerirlos en el plan.
+export function actividadesRecientes(reports, project, hoy, dias = 56) {
+  const vistos = new Map();
+  diasCoordinador(reports, project, sumarDias(hoy, -dias), hoy).forEach(d => (d.activities || []).forEach(a => {
+    const n = nombreReal(a).trim();
+    if (n && !vistos.has(normalizar(n))) vistos.set(normalizar(n), n);
+  }));
+  return [...vistos.values()].sort((a, b) => a.localeCompare(b, "es"));
 }
 
 export const hoyColombia = () => iso(new Date(Date.now() - 5 * 3600_000));
