@@ -49,7 +49,7 @@ export function estadoEntrega(plan, semana, hoy) {
 export const normalizar = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const VACIAS = new Set(["de", "del", "la", "el", "los", "las", "y", "en", "a", "para", "con", "al"]);
 // Singular y plural cuentan igual: "ENTREGA DE LOTE" = "ENTREGA DE LOTES".
-const singular = (p) => p.length > 4 && p.endsWith("es") && !p.endsWith("ies") ? p.slice(0, -2) : p.length > 3 && p.endsWith("s") ? p.slice(0, -1) : p;
+const singular = (p) => p.length > 3 ? p.replace(/s$/, "").replace(/e$/, "") : p;
 const palabras = (t) => normalizar(t).split(" ").filter(p => p && !VACIAS.has(p)).map(singular);
 export function mismaActividad(a, b) {
   const na = normalizar(a), nb = normalizar(b);
