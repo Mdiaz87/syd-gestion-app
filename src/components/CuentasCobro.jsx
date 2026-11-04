@@ -75,8 +75,8 @@ const legalizacionesPendientesDe = (alertas, cuentas, usuario) => {
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 // Empresa -> Centro de Costo -> Categoría -> Subcategoría (todos en cascada;
 // categoría/subcategoría quedan vacías si el centro de costo no tiene definidas).
-// Empresa y centro de costo arrancan vacíos: con uno ya marcado, el que no lo
-// cambiaba cargaba el pago al centro equivocado sin darse cuenta.
+// Empresa, centro de costo, categoría y subcategoría arrancan vacíos: con uno ya
+// marcado, el que no lo cambiaba cargaba el pago donde no era sin darse cuenta.
 const centrosDe = (empresa) => Object.keys(EMPRESAS_CENTROS_COSTO[empresa] || {});
 const categoriasDe = (empresa, cc) => Object.keys((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {});
 const subcategoriasDe = (empresa, cc, cat) => ((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {})[cat] || [];
@@ -87,8 +87,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado?.[0] || PROJECTS[0]);
   const empresaInicial = editando?.empresa || "";
   const centroCostoInicial = editando?.centro_costo || "";
-  const categoriaInicial = editando?.categoria || categoriasDe(empresaInicial, centroCostoInicial)[0] || "";
-  const subcategoriaInicial = editando?.subcategoria || subcategoriasDe(empresaInicial, centroCostoInicial, categoriaInicial)[0] || "";
+  const categoriaInicial = editando?.categoria || "";
+  const subcategoriaInicial = editando?.subcategoria || "";
   const [empresa, setEmpresa] = useState(empresaInicial);
   const [centroCosto, setCentroCosto] = useState(centroCostoInicial);
   const [categoria, setCategoria] = useState(categoriaInicial);
@@ -131,26 +131,21 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   const onChangeEmpresa = (e) => {
     const nuevaEmpresa = e.target.value;
     const centros = centrosDe(nuevaEmpresa);
-    const nuevoCentro = centros.length === 1 ? centros[0] : "";
-    const nuevaCategoria = categoriasDe(nuevaEmpresa, nuevoCentro)[0] || "";
     setEmpresa(nuevaEmpresa);
-    setCentroCosto(nuevoCentro);
-    setCategoria(nuevaCategoria);
-    setSubcategoria(subcategoriasDe(nuevaEmpresa, nuevoCentro, nuevaCategoria)[0] || "");
+    setCentroCosto(centros.length === 1 ? centros[0] : "");
+    setCategoria("");
+    setSubcategoria("");
   };
 
   const onChangeCentroCosto = (e) => {
-    const nuevoCentro = e.target.value;
-    const nuevaCategoria = categoriasDe(empresa, nuevoCentro)[0] || "";
-    setCentroCosto(nuevoCentro);
-    setCategoria(nuevaCategoria);
-    setSubcategoria(subcategoriasDe(empresa, nuevoCentro, nuevaCategoria)[0] || "");
+    setCentroCosto(e.target.value);
+    setCategoria("");
+    setSubcategoria("");
   };
 
   const onChangeCategoria = (e) => {
-    const nuevaCategoria = e.target.value;
-    setCategoria(nuevaCategoria);
-    setSubcategoria(subcategoriasDe(empresa, centroCosto, nuevaCategoria)[0] || "");
+    setCategoria(e.target.value);
+    setSubcategoria("");
   };
 
   const reset = () => {
@@ -168,6 +163,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
     const unidadFinal = unidad === "Otro" ? unidadOtro.trim() : unidad;
     if (!empresa) { setError("⚠️ Elige la empresa que va a realizar el pago."); return; }
     if (!centroCosto) { setError("⚠️ Elige el centro de costo."); return; }
+    if (categoriasDe(empresa, centroCosto).length > 0 && !categoria) { setError("⚠️ Elige la categoría."); return; }
+    if (subcategoriasDe(empresa, centroCosto, categoria).length > 0 && !subcategoria) { setError("⚠️ Elige la subcategoría."); return; }
     if (!proveedor.trim()) { setError("⚠️ Escribe el proveedor/contratista."); return; }
     if (!conceptoFinal) { setError("⚠️ Escribe el concepto/actividad."); return; }
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
@@ -273,6 +270,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
           <div>
             <label style={{ color: C.muted, fontSize: 12 }}>Categoría</label>
             <select style={INP} value={categoria} onChange={onChangeCategoria}>
+              <option value="">Escoge la categoría</option>
               {categoriasDe(empresa, centroCosto).map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
@@ -280,6 +278,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
             <div>
               <label style={{ color: C.muted, fontSize: 12 }}>Subcategoría</label>
               <select style={INP} value={subcategoria} onChange={e => setSubcategoria(e.target.value)}>
+                <option value="">Escoge la subcategoría</option>
                 {subcategoriasDe(empresa, centroCosto, categoria).map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
