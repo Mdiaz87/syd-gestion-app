@@ -73,7 +73,8 @@ Deno.serve(async (req) => {
       if (!["contabilidad", "cuentas_por_pagar"].includes(etapa)) {
         return new Response(JSON.stringify({ ok: false, error: "Etapa inválida" }), { status: 400 });
       }
-      await supabase.from("cuentas_cobro").update({ avance_gestion: { ...(cuenta.avance_gestion || {}), [etapa]: datos } }).eq("id", cuentaId);
+      const { error } = await supabase.from("cuentas_cobro").update({ avance_gestion: { ...(cuenta.avance_gestion || {}), [etapa]: datos } }).eq("id", cuentaId);
+      if (error) return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
