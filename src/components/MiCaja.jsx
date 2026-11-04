@@ -44,6 +44,7 @@ function FormGasto({ caja, gasto, onListo, onCancelar }) {
   const [nit, setNit] = useState(gasto?.nit || "");
   const [factura, setFactura] = useState(gasto?.numero_factura || "");
   const [concepto, setConcepto] = useState(gasto?.concepto || "");
+  const [centroCostoId, setCentroCostoId] = useState(gasto?.centro_costo_id || "");
   const [categoriaId, setCategoriaId] = useState(gasto?.categoria_id || "");
   const [subcategoriaId, setSubcategoriaId] = useState(gasto?.subcategoria_id || "");
   const [soportes, setSoportes] = useState(gasto?.soportes || []);
@@ -75,7 +76,7 @@ function FormGasto({ caja, gasto, onListo, onCancelar }) {
 
   const datos = () => ({
     id: idRef.current, caja_id: caja.id, medio: "caja", fecha, proveedor, nit, numero_factura: factura, concepto,
-    valor: +valor || 0, categoria_id: categoriaId, subcategoria_id: subcategoriaId || null, soportes,
+    valor: +valor || 0, centro_costo_id: centroCostoId || null, categoria_id: categoriaId, subcategoria_id: subcategoriaId || null, soportes,
   });
 
   const validar = () => {
@@ -83,6 +84,7 @@ function FormGasto({ caja, gasto, onListo, onCancelar }) {
     if (caja.limite_por_gasto && +valor > +caja.limite_por_gasto) return `El valor supera el límite por gasto de esta caja (${pesos(caja.limite_por_gasto)}).`;
     if (!proveedor.trim()) return "Escribe el proveedor.";
     if (!concepto.trim()) return "Escribe el concepto.";
+    if ((caja.centros || []).length > 0 && !centroCostoId) return "Escoge el centro de costo.";
     if (!categoriaId) return "Escoge la categoría.";
     return "";
   };
@@ -140,6 +142,14 @@ function FormGasto({ caja, gasto, onListo, onCancelar }) {
         <Campo label="NIT o cédula"><input inputMode="numeric" value={nit} onChange={(e) => setNit(e.target.value)} style={{ ...INP, fontSize: 16, padding: "10px 12px" }} /></Campo>
         <Campo label="N.º de factura"><input value={factura} onChange={(e) => setFactura(e.target.value)} placeholder="Si tiene" style={{ ...INP, fontSize: 16, padding: "10px 12px" }} /></Campo>
         <Campo label="Concepto *"><input value={concepto} onChange={(e) => setConcepto(e.target.value)} placeholder="Qué se compró y para qué" style={{ ...INP, fontSize: 16, padding: "10px 12px" }} /></Campo>
+        {(caja.centros || []).length > 0 && (
+          <Campo label="Centro de costo *">
+            <select value={centroCostoId} onChange={(e) => setCentroCostoId(e.target.value)} style={{ ...INP, fontSize: 16, padding: "10px 12px" }}>
+              <option value="">Escoge el centro de costo</option>
+              {caja.centros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </Campo>
+        )}
         <Campo label="Categoría *">
           <select value={categoriaId} onChange={(e) => { setCategoriaId(e.target.value); setSubcategoriaId(""); }} style={{ ...INP, fontSize: 16, padding: "10px 12px" }}>
             <option value="">Escoge...</option>
@@ -180,7 +190,7 @@ function FilaGasto({ g, onAbrir, onAnular }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{g.concepto}</div>
-          <div style={{ fontSize: 12, color: C.muted }}>{fechaDia(g.fecha)} · {g.proveedor}{g.soportes.length === 0 ? " · sin soporte" : ""}</div>
+          <div style={{ fontSize: 12, color: C.muted }}>{fechaDia(g.fecha)} · {g.proveedor}{g.centro_costo ? ` · ${g.centro_costo}` : ""}{g.soportes.length === 0 ? " · sin soporte" : ""}</div>
           {g.estado === "devuelto" && g.motivo_devolucion && <div style={{ fontSize: 12, color: C.danger, marginTop: 2 }}>{g.motivo_devolucion}</div>}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>

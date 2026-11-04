@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS, MESES } from "../lib/constants.js";
+import { C, INP, BTN_SM, PROJECTS, FRENTES_MASTER, FRENTES_POR_PROYECTO, ITEMS_PREOP, ITEMS_OP, ESTADO_OPTS, MESES, CENTROS_COSTO } from "../lib/constants.js";
 import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite, proyectosDeInformes } from "../lib/helpers.js";
 import { loadPresupuestoProyecto, savePresupuestoProyecto, verificarAlertasPresupuesto } from "../lib/api.js";
 import { Card, SectionTitle, PhotoUpload, CurrencyInput, Bar } from "./ui.jsx";
@@ -247,7 +247,11 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
                 <select style={{...INP,color:estColor[g.estado]}} value={g.estado} onChange={e=>setGasto(fi,gi,"estado",e.target.value)}>{ESTADO_OPTS.map(s=><option key={s}>{s}</option>)}</select>
                 <input style={INP} placeholder="Descripción" value={g.descripcion} onChange={e=>setGasto(fi,gi,"descripcion",e.target.value)}/>
                 <input type="number" style={INP} placeholder="$ Valor" value={g.valor} onChange={e=>setGasto(fi,gi,"valor",e.target.value)}/>
-                <input style={INP} placeholder="Centro costo" value={g.centroCosto} onChange={e=>setGasto(fi,gi,"centroCosto",e.target.value)}/>
+                <select style={INP} value={g.centroCosto||""} onChange={e=>setGasto(fi,gi,"centroCosto",e.target.value)}>
+                  <option value="">Escoge</option>
+                  {g.centroCosto&&!CENTROS_COSTO.includes(g.centroCosto)&&<option>{g.centroCosto}</option>}
+                  {CENTROS_COSTO.map(c=><option key={c}>{c}</option>)}
+                </select>
                 <button style={{...BTN_SM,padding:"4px 8px"}} onClick={()=>rmGasto(fi,gi)}>✕</button>
               </div>
             ))}

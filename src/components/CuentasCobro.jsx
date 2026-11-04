@@ -75,6 +75,8 @@ const legalizacionesPendientesDe = (alertas, cuentas, usuario) => {
 // ── FORMULARIO DE REGISTRO / EDICIÓN ───────────────────────────────────────────
 // Empresa -> Centro de Costo -> Categoría -> Subcategoría (todos en cascada;
 // categoría/subcategoría quedan vacías si el centro de costo no tiene definidas).
+// Empresa y centro de costo arrancan vacíos: con uno ya marcado, el que no lo
+// cambiaba cargaba el pago al centro equivocado sin darse cuenta.
 const centrosDe = (empresa) => Object.keys(EMPRESAS_CENTROS_COSTO[empresa] || {});
 const categoriasDe = (empresa, cc) => Object.keys((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {});
 const subcategoriasDe = (empresa, cc, cat) => ((EMPRESAS_CENTROS_COSTO[empresa] || {})[cc] || {})[cat] || [];
@@ -83,8 +85,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   const bloqueado = !editando && bloqueadas.length > 0;
   const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado?.[0] || PROJECTS[0]);
-  const empresaInicial = editando?.empresa || EMPRESAS[0];
-  const centroCostoInicial = editando?.centro_costo || centrosDe(empresaInicial)[0];
+  const empresaInicial = editando?.empresa || "";
+  const centroCostoInicial = editando?.centro_costo || "";
   const categoriaInicial = editando?.categoria || categoriasDe(empresaInicial, centroCostoInicial)[0] || "";
   const subcategoriaInicial = editando?.subcategoria || subcategoriasDe(empresaInicial, centroCostoInicial, categoriaInicial)[0] || "";
   const [empresa, setEmpresa] = useState(empresaInicial);
@@ -128,7 +130,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
 
   const onChangeEmpresa = (e) => {
     const nuevaEmpresa = e.target.value;
-    const nuevoCentro = centrosDe(nuevaEmpresa)[0];
+    const centros = centrosDe(nuevaEmpresa);
+    const nuevoCentro = centros.length === 1 ? centros[0] : "";
     const nuevaCategoria = categoriasDe(nuevaEmpresa, nuevoCentro)[0] || "";
     setEmpresa(nuevaEmpresa);
     setCentroCosto(nuevoCentro);
@@ -151,10 +154,8 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   };
 
   const reset = () => {
-    const nuevoCentro = centrosDe(EMPRESAS[0])[0];
-    const nuevaCategoria = categoriasDe(EMPRESAS[0], nuevoCentro)[0] || "";
-    setEmpresa(EMPRESAS[0]); setCentroCosto(nuevoCentro);
-    setCategoria(nuevaCategoria); setSubcategoria(subcategoriasDe(EMPRESAS[0], nuevoCentro, nuevaCategoria)[0] || "");
+    setEmpresa(""); setCentroCosto("");
+    setCategoria(""); setSubcategoria("");
     setProveedor(""); setConcepto(ACTIVIDADES_CATALOGO[0]); setConceptoOtro("");
     setCantidad(""); setUnidad(UNIDADES[0]); setUnidadOtro("");
     setValor(""); setObservaciones(""); setArchivosNuevos([]); setSoportesExistentes([]);
@@ -255,12 +256,14 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Empresa que realiza el pago</label>
           <select style={INP} value={empresa} onChange={onChangeEmpresa}>
+            <option value="">Escoge la empresa</option>
             {EMPRESAS.map(e => <option key={e}>{e}</option>)}
           </select>
         </div>
         <div>
           <label style={{ color: C.muted, fontSize: 12 }}>Centro de costo</label>
           <select style={INP} value={centroCosto} onChange={onChangeCentroCosto}>
+            <option value="">{empresa ? "Escoge el centro de costo" : "Primero escoge la empresa"}</option>
             {centrosDe(empresa).map(c => <option key={c}>{c}</option>)}
           </select>
         </div>

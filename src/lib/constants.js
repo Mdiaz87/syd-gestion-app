@@ -261,6 +261,7 @@ export const EMPRESAS_CENTROS_COSTO = {
   },
 };
 export const EMPRESAS = Object.keys(EMPRESAS_CENTROS_COSTO);
+export const CENTROS_COSTO = [...new Set(Object.values(EMPRESAS_CENTROS_COSTO).flatMap(centros => Object.keys(centros)))].sort();
 export const OPERADORES_OPTS = ["1 Operador","2 Operadores","3 Operadores","4 Operadores","5 Operadores","Otro"];
 export const ETAPAS = ["Etapa 1","Etapa 2","Etapa 3","Etapa 4","General"];
 export const ROLES = ["Coordinador","Ingeniero","Directivo"];
