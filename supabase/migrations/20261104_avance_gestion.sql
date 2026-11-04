@@ -3,3 +3,4 @@
 -- (aprobacion-gerencia-callback, decision 'avance'). Solo sirve para mostrar
 -- quién aprobó y quién falta; el estado de la cuenta no depende de esta columna.
 alter table cuentas_cobro add column if not exists avance_gestion jsonb;
+NOTIFY pgrst, 'reload schema';
