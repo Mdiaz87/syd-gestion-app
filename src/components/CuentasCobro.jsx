@@ -6,17 +6,6 @@ import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
 
-const ESTADO_INFO = {
-  pendiente_contable: { label: "Pendiente de revisión contable", color: C.warn },
-  devuelto: { label: "Devuelto", color: C.danger },
-  // Después de Contabilidad firman en orden los aprobadores del proyecto aquí
-  // (Susana -> Miguel; Icon Park: Carmen -> Susana -> Miguel) y luego la cuenta
-  // pasa a Cuentas por Pagar de SYD Gestión (2026-10-30).
-  aprobado_contable: { label: "En aprobación de Gerencia", color: C.blueMid },
-  aprobado_total: { label: "Aprobado", color: C.green },
-  rechazado: { label: "Rechazado", color: C.muted },
-};
-
 const fileToBase64 = (file) => new Promise((res, rej) => {
   const reader = new FileReader();
   reader.onload = () => res(reader.result.split(",")[1]);
@@ -362,6 +351,125 @@ const enGestion = (cuenta) => cuenta.estado === "aprobado_contable" && cuenta.ap
 const turnoDe = (cuenta, cadena) =>
   cuenta.estado === "aprobado_contable" && !enGestion(cuenta) ? (cadena[firmasDe(cuenta).length] || null) : null;
 
+// Recorrido completo del pago: quién aprobó, en quién va y quién falta.
+// Contabilidad y Cuentas por pagar viven en SYD Gestión, que avisa cada paso en
+// avance_gestion; en las cuentas sin ese dato esos tramos salen como un solo paso.
+const nombreCorto = (nombre) => nombre.includes("Cuentas") || nombre.includes("Firmas") ? nombre : nombre.trim().split(/\s+/)[0];
+
+function recorridoDe(cuenta, cadena) {
+  const historial = cuenta.historial || [];
+  if (cuenta.estado === "devuelto" || cuenta.estado === "rechazado") {
+    const devuelto = cuenta.estado === "devuelto";
+    const evento = [...historial].reverse().find(h => /devuelt|rechazad/i.test(h.accion || ""));
+    const por = evento?.por || cuenta.revisado_por || "Gerencia";
+    return {
+      frase: `${devuelto ? "Devuelto" : "Rechazado"} por ${por}`,
+      color: devuelto ? C.danger : C.muted,
+      nota: cuenta.condicion || cuenta.motivo_rechazo || evento?.detalle || "",
+      pasos: [{ nombre: por, estado: "devuelto", fecha: evento?.fecha }],
+      va: "", dias: null,
+    };
+  }
+  const avance = cuenta.avance_gestion || {};
+  const firmas = firmasDe(cuenta);
+  const pagada = !!cuenta.pago_realizado;
+  const aprobada = cuenta.estado === "aprobado_total" || pagada;
+  const enContabilidad = !aprobada && cuenta.estado === "pendiente_contable";
+  const enviada = enGestion(cuenta);
+  const enFirmas = !aprobada && cuenta.estado === "aprobado_contable" && !enviada;
+  // Con todas las firmas pero sin llegar a SYD Gestión (falló el envío): el siguiente paso es Cuentas por pagar.
+  const enCxp = !aprobada && (enviada || (enFirmas && cadena.length > 0 && firmas.length >= cadena.length));
+  const aprobContable = [...historial].reverse().find(h => (h.accion || "").startsWith("Aprobado por Contabilidad"));
+  const pasos = [];
+
+  const contabilidad = avance.contabilidad;
+  if (contabilidad) {
+    const auxiliarOk = !enContabilidad || contabilidad.estado === "pendiente_jefe";
+    pasos.push({ nombre: contabilidad.auxiliar_nombre || "Auxiliar contable", estado: auxiliarOk ? "ok" : "turno", fecha: auxiliarOk ? contabilidad.auxiliar_fecha : null });
+    pasos.push({ nombre: contabilidad.jefe_nombre || "Neida", estado: !enContabilidad ? "ok" : auxiliarOk ? "turno" : "falta", fecha: !enContabilidad ? (contabilidad.jefe_fecha || aprobContable?.fecha) : null });
+  } else {
+    pasos.push({ nombre: "Contabilidad", estado: enContabilidad ? "turno" : "ok", fecha: aprobContable?.fecha, detalle: aprobContable?.por ? `Contabilidad: ${aprobContable.por}` : null });
+  }
+
+  if (enCxp || aprobada) {
+    // En SYD Gestión vuelven a aprobar las mismas personas: las firmas de aquí van en un solo paso.
+    const nombres = firmas.map(f => `${f.nombre} (${fechaCorta(f.fecha)})`).join(", ");
+    pasos.push({ nombre: "Firmas SYD Técnica", estado: "ok", fecha: firmas[firmas.length - 1]?.fecha, detalle: nombres ? `Firmas SYD Técnica: ${nombres}` : null });
+  } else if (cadena.length) {
+    cadena.forEach((a, i) => pasos.push({
+      nombre: a.nombre || "Gerencia",
+      estado: !enFirmas ? "falta" : i < firmas.length ? "ok" : i === firmas.length ? "turno" : "falta",
+      fecha: firmas[i]?.fecha,
+    }));
+  } else {
+    pasos.push({ nombre: "Gerencia", estado: enFirmas ? "turno" : "falta" });
+  }
+
+  const comite = Array.isArray(avance.cuentas_por_pagar) ? [...avance.cuentas_por_pagar].sort((a, b) => a.orden - b.orden) : [];
+  if ((enviada || aprobada) && comite.length) {
+    let turnoAsignado = false;
+    comite.forEach(a => {
+      const ok = aprobada || !!a.aprobado_at;
+      const turno = !ok && !turnoAsignado;
+      if (turno) turnoAsignado = true;
+      pasos.push({ nombre: a.nombre || "Cuentas por pagar", estado: ok ? "ok" : turno ? "turno" : "falta", fecha: a.aprobado_at });
+    });
+  } else {
+    pasos.push({ nombre: "Cuentas por pagar", estado: aprobada ? "ok" : enCxp ? "turno" : "falta" });
+  }
+  pasos.push({ nombre: "Tesorería", estado: pagada ? "ok" : aprobada ? "turno" : "falta", fecha: fechaPagoDe(cuenta) });
+
+  if (pagada) return { frase: "Pagado", color: C.green, nota: "", pasos, va: "", dias: null };
+  const indice = pasos.findIndex(p => p.estado === "turno");
+  if (indice < 0) return { frase: "Por confirmar el paso actual", color: C.muted, nota: "", pasos, va: "", dias: null };
+  const turno = pasos[indice];
+  const fechas = [cuenta.created_at, ...historial.map(h => h.fecha), ...pasos.map(p => p.fecha)]
+    .filter(Boolean).map(f => new Date(f).getTime()).filter(Number.isFinite);
+  const textoGestion = enviada && turno.nombre !== "Cuentas por pagar" ? " · SYD Gestión" : "";
+  return {
+    frase: `Va en ${turno.nombre}${textoGestion} · Paso ${indice + 1} de ${pasos.length}`,
+    color: C.warn,
+    nota: cuenta.aprobacion_cxp_estado === "error" ? "No se pudo enviar a SYD Gestión" : "",
+    pasos, va: turno.nombre,
+    dias: fechas.length ? Math.max(0, Math.floor((Date.now() - Math.max(...fechas)) / 86400000)) : null,
+  };
+}
+
+const ESTILO_PASO = {
+  ok: { background: C.green + "18", color: C.green },
+  turno: { background: C.warn + "22", color: C.warn, fontWeight: 700, border: `1px solid ${C.warn}` },
+  falta: { background: C.bgCard2, color: C.muted },
+  devuelto: { background: C.danger + "18", color: C.danger, fontWeight: 700 },
+};
+const MARCA_PASO = { ok: "✓ ", turno: "⏳ ", falta: "", devuelto: "↩ " };
+
+function RecorridoPago({ recorrido, abierto, onToggle }) {
+  const { frase, color, nota, pasos, dias } = recorrido;
+  const aprobaron = pasos.filter(p => p.estado === "ok");
+  const faltan = pasos.filter(p => p.estado === "turno" || p.estado === "falta");
+  return (
+    <div onClick={onToggle} title="Ver quién aprobó y quién falta" style={{ cursor: "pointer", minWidth: 260, maxWidth: 400 }}>
+      <div style={{ fontWeight: 700, fontSize: 12, color }}>{frase}</div>
+      {dias !== null && <div style={{ color: C.muted, fontSize: 11 }}>{dias === 0 ? "Lleva menos de un día" : `Lleva ${dias} día${dias === 1 ? "" : "s"} esperando`}</div>}
+      {nota && <div style={{ color: C.muted, fontSize: 11 }}>{nota}</div>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", marginTop: 4 }}>
+        {pasos.map((p, i) => (
+          <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+            {i > 0 && <span style={{ color: C.muted, fontSize: 10 }}>›</span>}
+            <span style={{ ...ESTILO_PASO[p.estado], borderRadius: 6, padding: "1px 6px", fontSize: 10.5, whiteSpace: "nowrap" }}>{MARCA_PASO[p.estado]}{nombreCorto(p.nombre)}</span>
+          </span>
+        ))}
+      </div>
+      {abierto && (
+        <div style={{ marginTop: 6, background: C.bgCard2, borderRadius: 8, padding: "6px 8px", fontSize: 11, color: C.text, lineHeight: 1.6 }}>
+          {aprobaron.length > 0 && <div><b>Aprobó:</b> {aprobaron.map(p => p.detalle || (p.fecha ? `${p.nombre} (${fechaCorta(p.fecha)})` : `${p.nombre} (sin detalle)`)).join(", ")}</div>}
+          {faltan.length > 0 && <div><b>Falta:</b> {faltan.map(p => p.nombre).join(", ")}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CadenaFirmas({ cuenta, cadena }) {
   const firmas = firmasDe(cuenta);
   return (
@@ -564,6 +672,11 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
+  const [fVa, setFVa] = useState("");
+  const [recorridoAbierto, setRecorridoAbierto] = useState(null);
+  const recorridos = useMemo(() => new Map(cuentas.map(c => [c.id, recorridoDe(c, cadenaDe(aprobadores, c.project))])), [cuentas, aprobadores]);
+  const responsables = useMemo(() => [...new Set([...recorridos.values()].map(r => r.va).filter(Boolean))].sort(), [recorridos]);
+
   // Cuentas donde le toca firmar a este usuario, y las que ya tienen todas las
   // firmas pero no llegaron a SYD Gestión (falló el envío).
   const pendientesDeMiFirma = useMemo(() =>
@@ -579,6 +692,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
     return [...cuentas].filter(c => {
       if (q && !((c.project || "").toLowerCase().includes(q) || (c.proveedor || "").toLowerCase().includes(q))) return false;
       if (fProyecto && c.project !== fProyecto) return false;
+      if (fVa && recorridos.get(c.id)?.va !== fVa) return false;
       if (quickFilter === "pendientes_mias" && c.estado !== "aprobado_contable") return false;
       if (quickFilter === "revision_contable" && c.estado !== "pendiente_contable") return false;
       if (quickFilter === "aprobadas" && c.estado !== "aprobado_total") return false;
@@ -587,9 +701,9 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
       if (quickFilter === "pagadas" && !(c.estado === "aprobado_total" && c.pago_realizado)) return false;
       return true;
     });
-  }, [cuentas, search, fProyecto, quickFilter]);
+  }, [cuentas, search, fProyecto, fVa, recorridos, quickFilter]);
 
-  useEffect(() => { setVisibleCount(25); }, [search, fProyecto, quickFilter]);
+  useEffect(() => { setVisibleCount(25); }, [search, fProyecto, fVa, quickFilter]);
 
   const reenviarAGerencia = async (id) => {
     setAviso("Enviando a aprobación de Gerencia...");
@@ -708,11 +822,15 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 10, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <input style={INP} placeholder="Buscar por proyecto, proveedor..." value={search} onChange={e => setSearch(e.target.value)} />
         <select style={INP} value={fProyecto} onChange={e => setFProyecto(e.target.value)}>
           <option value="">Proyecto: todos</option>
           {proyectos.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select style={INP} value={fVa} onChange={e => setFVa(e.target.value)}>
+          <option value="">Va en: todos</option>
+          {responsables.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </div>
 
@@ -745,7 +863,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
         <>
           <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>{filtradas.length} de {cuentas.length} cuenta{cuentas.length === 1 ? "" : "s"} de cobro</div>
           <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 12, background: C.bgCard }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 720 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13, minWidth: 980 }}>
               <thead>
                 <tr style={{ background: C.bgCard2, borderBottom: `2px solid ${C.border}` }}>
                   {["Fecha", "Proyecto", "Proveedor", "Concepto", "Valor", "Estado", "Pago", "Acciones"].map(h =>
@@ -758,9 +876,6 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                   <tr><td colSpan={8} style={{ textAlign: "center", color: C.muted, padding: 26 }}>Ninguna cuenta coincide con los filtros.</td></tr>
                 )}
                 {filtradas.slice(0, visibleCount).map(c => {
-                  const info = c.estado === "aprobado_contable"
-                    ? (enGestion(c) ? { label: "En aprobación SYD Gestión", color: C.blueMid } : { label: "Firma de Gerencia", color: C.warn })
-                    : (ESTADO_INFO[c.estado] || ESTADO_INFO.pendiente_contable);
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "9px 12px", color: C.muted, whiteSpace: "nowrap" }}>{fechaCorta(c.created_at)}</td>
@@ -772,8 +887,7 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                         {c.valor_final_pagar != null && <span style={{ color: C.warn, fontSize: 10, marginLeft: 4 }} title="Valor corregido por Contabilidad">✏️</span>}
                       </td>
                       <td style={{ padding: "9px 12px" }}>
-                        <span style={{ background: info.color + "18", color: info.color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, letterSpacing: "0.1px", whiteSpace: "nowrap" }}>{info.label}</span>
-                        {c.estado === "aprobado_contable" && !enGestion(c) && <div style={{ fontSize: 10, marginTop: 3 }}><CadenaFirmas cuenta={c} cadena={cadenaDe(aprobadores, c.project)} /></div>}
+                        <RecorridoPago recorrido={recorridos.get(c.id)} abierto={recorridoAbierto === c.id} onToggle={() => setRecorridoAbierto(recorridoAbierto === c.id ? null : c.id)} />
                       </td>
                       <td style={{ padding: "9px 12px" }}>
                         {c.estado === "aprobado_total" ? (

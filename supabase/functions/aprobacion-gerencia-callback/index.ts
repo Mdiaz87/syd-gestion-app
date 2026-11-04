@@ -11,6 +11,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   - pagado: Tesorería registró en Gestión que el banco pagó toda la cuenta
 //     (pedido de Miguel, 2026-10-23). La columna "Pago" queda en Pagado sola,
 //     con la fecha del pago -- antes había que marcarla a mano.
+//   - avance: Contabilidad o un miembro del comité aprobó su paso en Gestión
+//     (pedido de Miguel, 2026-11-04). Solo guarda el dato para mostrar el
+//     recorrido del pago en avance_gestion; no cambia estado ni historial.
 // Solo cambia el estado de cuentas que están esperando esa decisión
 // ("aprobado_contable"); si llega un aviso tarde o repetido, solo se anota.
 //
@@ -54,8 +57,8 @@ Deno.serve(async (req) => {
     if (req.headers.get("x-webhook-secret") !== Deno.env.get("APROBACION_GERENCIA_CALLBACK_SECRET")) {
       return new Response(JSON.stringify({ ok: false, error: "No autorizado" }), { status: 401 });
     }
-    const { referenciaExterna, decision, motivo, fechaPago } = await req.json();
-    if (!referenciaExterna || !["aprobado", "devuelto", "rechazado", "pagado"].includes(decision)) {
+    const { referenciaExterna, decision, motivo, fechaPago, etapa, datos } = await req.json();
+    if (!referenciaExterna || !["aprobado", "devuelto", "rechazado", "pagado", "avance"].includes(decision)) {
       return new Response(JSON.stringify({ ok: false, error: "Falta referenciaExterna o decision inválida" }), { status: 400 });
     }
 
@@ -64,6 +67,14 @@ Deno.serve(async (req) => {
     const { data: cuenta } = await supabase.from("cuentas_cobro").select("*").eq("id", cuentaId).single();
     if (!cuenta) {
       return new Response(JSON.stringify({ ok: false, error: `No existe la cuenta de cobro ${referenciaExterna}` }), { status: 404 });
+    }
+
+    if (decision === "avance") {
+      if (!["contabilidad", "cuentas_por_pagar"].includes(etapa)) {
+        return new Response(JSON.stringify({ ok: false, error: "Etapa inválida" }), { status: 400 });
+      }
+      await supabase.from("cuentas_cobro").update({ avance_gestion: { ...(cuenta.avance_gestion || {}), [etapa]: datos } }).eq("id", cuentaId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
     const ahora = new Date().toISOString();
