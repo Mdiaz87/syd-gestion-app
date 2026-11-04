@@ -409,10 +409,11 @@ function recorridoDe(cuenta, cadena) {
   }
 
   const comite = Array.isArray(avance.cuentas_por_pagar) ? [...avance.cuentas_por_pagar].sort((a, b) => a.orden - b.orden) : [];
-  if ((enviada || aprobada) && comite.length) {
+  // Pagos viejos aprobados con otra regla: su comité quedó sin fechas y no dice quién aprobó de verdad.
+  if (comite.length && (enviada || (aprobada && comite.every(a => a.aprobado_at)))) {
     let turnoAsignado = false;
     comite.forEach(a => {
-      const ok = aprobada || !!a.aprobado_at;
+      const ok = !!a.aprobado_at;
       const turno = !ok && !turnoAsignado;
       if (turno) turnoAsignado = true;
       pasos.push({ nombre: a.nombre || "Cuentas por pagar", estado: ok ? "ok" : turno ? "turno" : "falta", fecha: a.aprobado_at });
