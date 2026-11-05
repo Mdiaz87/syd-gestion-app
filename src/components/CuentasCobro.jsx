@@ -383,7 +383,10 @@ function recorridoDe(cuenta, cadena) {
   const pasos = [];
 
   const contabilidad = avance.contabilidad;
-  if (contabilidad && !enContabilidad && !contabilidad.auxiliar_fecha && contabilidad.jefe_nombre) {
+  if (contabilidad && nombreCorto(contabilidad.auxiliar_nombre || "") === nombreCorto(contabilidad.jefe_nombre || "Neida")) {
+    // Proyecto sin auxiliar: la jefa de Contabilidad revisa directo, es un solo paso.
+    pasos.push({ nombre: contabilidad.jefe_nombre || "Neida", estado: enContabilidad ? "turno" : "ok", fecha: !enContabilidad ? (contabilidad.jefe_fecha || aprobContable?.fecha) : null });
+  } else if (contabilidad && !enContabilidad && !contabilidad.auxiliar_fecha && contabilidad.jefe_nombre) {
     // Revisión de antes del paso auxiliar -> jefa, o aprobada directo por la jefa: decidió una sola persona.
     pasos.push({ nombre: contabilidad.jefe_nombre, estado: "ok", fecha: contabilidad.jefe_fecha || aprobContable?.fecha });
   } else if (contabilidad) {
