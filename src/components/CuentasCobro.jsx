@@ -886,7 +886,10 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
                   return (
                     <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "9px 12px", color: C.muted, whiteSpace: "nowrap" }}>{fechaCorta(c.created_at)}</td>
-                      <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>{c.project}</td>
+                      <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>
+                        {c.project}
+                        {c.autor && <div style={{ color: C.muted, fontWeight: 500, fontSize: 11.5, marginTop: 2 }}>👤 {c.autor}</div>}
+                      </td>
                       <td style={{ padding: "9px 12px", color: C.muted }}>{c.proveedor}</td>
                       <td style={{ padding: "9px 12px", color: C.text }}>{c.concepto}{c.cantidad ? ` · ${c.cantidad} ${c.unidad || ""}` : ""}</td>
                       <td style={{ padding: "9px 12px", color: C.text, fontWeight: 600, whiteSpace: "nowrap" }} title={c.valor_final_pagar != null ? `Valor registrado: ${fmt(c.valor)}${c.retencion ? ` · Retención: ${fmt(c.retencion)}` : ""}` : undefined}>
