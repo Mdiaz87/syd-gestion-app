@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { C, INP, BTN_SM, PROJECTS, PROYECTOS_SIN_OBRA, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { loadPresupuestos, loadPartidas, guardarPresupuesto, guardarPartidas, borrarPresupuesto, crearVersionPresupuesto } from "../lib/api.js";
+import { loadPresupuestos, loadPartidas, guardarPresupuesto, guardarPartidas, borrarPresupuesto, crearVersionPresupuesto, loadEjecucionManual, guardarEjecucionManual, borrarEjecucionManual, asignarPartidaCuenta } from "../lib/api.js";
+import { controlPresupuesto, codigos, hojas, valorCuenta } from "../lib/controlPresupuesto.js";
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, SectionTitle } from "./ui.jsx";
 
 // ── PRESUPUESTOS DE OBRA (etapa 1) ────────────────────────────────────────────
@@ -143,7 +145,142 @@ function TablaPartidas({ partidas, setPartidas, editable }) {
   );
 }
 
-function Editor({ pres, usuario, puedeEditarProyecto, onVolver, onCambio }) {
+
+// ── CONTROL: proyectado vs. ejecutado (presupuesto vigente) ───────────────────
+const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const etiquetaMes = (m) => `${MESES_C[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}`;
+const millones = (v) => `$${Math.round(v / 1e6).toLocaleString("es-CO")}M`;
+const hoyCol = () => new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
+
+function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefreshCuentas }) {
+  const [manuales, setManuales] = useState([]);
+  const [form, setForm] = useState({ linaje: "", mes: hoyCol().slice(0, 7), valor: "", nota: "" });
+  const [abierta, setAbierta] = useState(null);
+  const recargar = () => loadEjecucionManual(pres.project).then(setManuales);
+  useEffect(() => { recargar(); }, [pres.project]);
+
+  const hoy = hoyCol();
+  const delProyecto = cuentas.filter(c => c.project === pres.project);
+  const c = controlPresupuesto(pres, partidas, delProyecto, manuales, hoy);
+  const cod = codigos(partidas);
+  const padre = Object.fromEntries(partidas.map(p => [p.id, p]));
+  const nombre = (p) => `${cod[p.id]} ${p.padre_id ? `${padre[p.padre_id]?.nombre} › ` : ""}${p.nombre}`;
+  const opciones = hojas(partidas);
+  const linajes = new Set(opciones.map(p => p.linaje));
+  const sinPartida = delProyecto.filter(x => x.estado === "aprobado_total" && !linajes.has(x.partida_linaje));
+  const brecha = c.pctFinanciero - c.pctProgramado;
+  const kpi = (label, valor, sub, color) => (
+    <div style={{ background: C.bgCard2, borderRadius: 10, padding: "10px 14px", flex: "1 1 160px" }}>
+      <div style={{ color: C.muted, fontSize: 11.5 }}>{label}</div>
+      <div style={{ color: color || C.blue, fontWeight: 800, fontSize: 18 }}>{valor}</div>
+      {sub && <div style={{ color: C.muted, fontSize: 11 }}>{sub}</div>}
+    </div>
+  );
+  const agregarManual = async () => {
+    if (!form.linaje || !(+form.valor > 0) || !form.mes) { alert("Escoge la actividad, el mes y un valor mayor a cero."); return; }
+    if (await guardarEjecucionManual({ project: pres.project, linaje: form.linaje, mes: `${form.mes}-01`, valor: +form.valor, nota: form.nota.trim() || null, creado_por: usuario.id, creado_nombre: usuario.nombre })) {
+      setForm(f => ({ ...f, valor: "", nota: "" })); recargar();
+    }
+  };
+
+  return (
+    <>
+      <Card style={{ marginBottom: 16 }}>
+        <SectionTitle>Control: proyectado vs. ejecutado</SectionTitle>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          {kpi("Ejecutado (pagado + manual)", fmt(c.ejecutado) === "-" ? "$ 0" : fmt(c.ejecutado), `${c.pctFinanciero.toFixed(1)}% del presupuesto`)}
+          {kpi("Programado a hoy", `${c.pctProgramado.toFixed(1)}%`, fmt(c.proyectadoHoy) === "-" ? "$ 0" : fmt(c.proyectadoHoy))}
+          {kpi("Diferencia", `${brecha >= 0 ? "+" : ""}${brecha.toFixed(1)} pts`, brecha > 5 ? "Se ha ejecutado más de lo programado" : brecha < -5 ? "Va por debajo de lo programado" : "En línea con lo programado", brecha > 5 ? C.danger : brecha < -5 ? C.warn : C.green)}
+          {kpi("Aprobado sin pagar", fmt(c.comprometido) === "-" ? "$ 0" : fmt(c.comprometido), c.tramite ? `${fmt(c.tramite)} más en trámite` : "Nada en trámite")}
+        </div>
+        {c.mensual.length > 0 && (
+          <div style={{ height: 280 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={c.mensual.map(m => ({ ...m, mes: etiquetaMes(m.mes) }))} margin={{ left: 10, right: 10, top: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="v" tickFormatter={millones} tick={{ fontSize: 11 }} width={64} />
+                <YAxis yAxisId="p" orientation="right" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} width={40} />
+                <Tooltip formatter={(v, n) => n.includes("acumulado") ? `${v}%` : fmt(v)} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar isAnimationActive={false} yAxisId="v" dataKey="proyectado" name="Proyectado del mes" fill={C.border} />
+                <Bar isAnimationActive={false} yAxisId="v" dataKey="real" name="Ejecutado del mes" fill={C.blueMid} />
+                <Line isAnimationActive={false} yAxisId="p" type="monotone" dataKey="proyectadoAcum" name="Programado acumulado" stroke={C.muted} strokeDasharray="5 4" dot={false} />
+                <Line isAnimationActive={false} yAxisId="p" type="monotone" dataKey="realAcum" name="Ejecutado acumulado" stroke={C.green} strokeWidth={2} dot={false} connectNulls={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div style={{ color: C.muted, fontSize: 11.5, marginTop: 6 }}>Lo proyectado reparte el total de cada actividad entre sus fechas de inicio y fin. Lo ejecutado son las cuentas de cobro pagadas, en el mes del pago, más la ejecución manual.</div>
+      </Card>
+
+      <Card style={{ marginBottom: 16 }}>
+        <SectionTitle>Por actividad</SectionTitle>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead><tr style={{ color: C.muted, fontSize: 10.5, textAlign: "left", textTransform: "uppercase", letterSpacing: .4 }}>
+              {["Actividad", "Presupuesto", "Programado a hoy", "Ejecutado", "Aprobado sin pagar", "En trámite", "% ejecutado", "Saldo", ""].map((h, i) => <th key={i} style={{ padding: 6, borderBottom: `1px solid ${C.border}`, textAlign: i && i < 8 ? "right" : "left" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {c.filas.map(f => (
+                <Fragment key={f.partida.linaje}>
+                  <tr onClick={() => setAbierta(abierta === f.partida.linaje ? null : f.partida.linaje)} style={{ cursor: "pointer", borderBottom: `1px solid ${C.border}`, background: f.alerta === "sobrecosto" ? C.danger + "0c" : f.alerta === "cerca" ? C.warn + "0c" : undefined }}>
+                    <td style={{ padding: 6, fontWeight: 600 }}>{nombre(f.partida)}</td>
+                    <td style={{ padding: 6, textAlign: "right" }}>{fmt(f.total)}</td>
+                    <td style={{ padding: 6, textAlign: "right", color: C.muted }}>{fmt(f.proyectadoHoy)}</td>
+                    <td style={{ padding: 6, textAlign: "right", fontWeight: 700 }}>{fmt(f.ejecutado)}</td>
+                    <td style={{ padding: 6, textAlign: "right" }}>{fmt(f.comprometido)}</td>
+                    <td style={{ padding: 6, textAlign: "right", color: C.muted }}>{fmt(f.tramite)}</td>
+                    <td style={{ padding: 6, textAlign: "right" }}>{f.pct == null ? "—" : `${f.pct.toFixed(1)}%`}</td>
+                    <td style={{ padding: 6, textAlign: "right", color: f.saldo < 0 ? C.danger : C.text, fontWeight: f.saldo < 0 ? 700 : 400 }}>{fmt(f.saldo) === "-" ? "$ 0" : fmt(f.saldo)}</td>
+                    <td style={{ padding: 6, whiteSpace: "nowrap", color: f.alerta === "sobrecosto" ? C.danger : C.warn, fontWeight: 700, fontSize: 11 }}>{f.alerta === "sobrecosto" ? "🔴 Sobrecosto" : f.alerta === "cerca" ? "⚠️ +90%" : ""}</td>
+                  </tr>
+                  {abierta === f.partida.linaje && (
+                    <tr key={f.partida.linaje + "-d"}><td colSpan={9} style={{ padding: "6px 10px 12px", background: C.bgCard2, fontSize: 12 }}>
+                      {f.cuentas.length ? f.cuentas.map(x => <div key={x.id}>{x._tipo === "pagado" ? "✅" : x._tipo === "comprometido" ? "⏳" : "📝"} {x.proveedor} · {x.concepto} · <b>{fmt(valorCuenta(x))}</b> · {x.autor}</div>) : <div style={{ color: C.muted }}>Sin cuentas de cobro cargadas.</div>}
+                      {manuales.filter(m => m.linaje === f.partida.linaje).map(m => <div key={m.id}>✍️ Manual {etiquetaMes(String(m.mes).slice(0, 7))} · <b>{fmt(m.valor)}</b>{m.nota ? ` · ${m.nota}` : ""} · {m.creado_nombre} {puedeEditarProyecto && <button onClick={async (e) => { e.stopPropagation(); if (window.confirm("¿Quitar este registro manual?") && await borrarEjecucionManual(m.id)) recargar(); }} style={{ ...BTN_SM, padding: "0 6px", color: C.danger }}>✕</button>}</div>)}
+                    </td></tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {puedeEditarProyecto && (
+        <Card style={{ marginBottom: 16 }}>
+          <SectionTitle>Ejecución manual</SectionTitle>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>Para lo que no pasa por cuentas de cobro: pagos directos, costos compartidos o lo ejecutado antes de usar la app.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(200px,2fr) 140px 150px minmax(160px,2fr) auto", gap: 8, alignItems: "end" }}>
+            <select style={INP} value={form.linaje} onChange={e => setForm(f => ({ ...f, linaje: e.target.value }))}><option value="">Actividad…</option>{opciones.map(p => <option key={p.linaje} value={p.linaje}>{nombre(p)}</option>)}</select>
+            <input style={INP} type="month" value={form.mes} onChange={e => setForm(f => ({ ...f, mes: e.target.value }))} />
+            <input style={INP} type="number" min="0" placeholder="Valor" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} />
+            <input style={INP} placeholder="Nota (de dónde sale)" value={form.nota} onChange={e => setForm(f => ({ ...f, nota: e.target.value }))} />
+            <button onClick={agregarManual} style={{ ...BTN_SM, padding: "9px 14px", color: C.blueMid, borderColor: C.blueMid, fontWeight: 700 }}>Agregar</button>
+          </div>
+        </Card>
+      )}
+
+      {sinPartida.length > 0 && (
+        <Card style={{ marginBottom: 16, border: `1px solid ${C.warn}` }}>
+          <SectionTitle color={C.warn}>Cuentas aprobadas de {pres.project} sin actividad ({sinPartida.length})</SectionTitle>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>No suman al ejecutado hasta que se carguen a una actividad. Pueden ser de otro presupuesto del mismo proyecto.</div>
+          {sinPartida.slice(0, 50).map(x => (
+            <div key={x.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12.5, flexWrap: "wrap" }}>
+              <span style={{ flex: "1 1 280px" }}>{new Date(x.created_at).toLocaleDateString("es-CO")} · {x.proveedor} · {x.concepto} · <b>{fmt(valorCuenta(x))}</b> · {x.autor}</span>
+              {puedeEditarProyecto && <select style={{ ...INP, width: 280, padding: "4px 8px" }} defaultValue="" onChange={async e => { if (e.target.value && await asignarPartidaCuenta(x.id, e.target.value, usuario.nombre)) onRefreshCuentas(); }}>
+                <option value="">Cargar a…</option>{opciones.map(p => <option key={p.linaje} value={p.linaje}>{nombre(p)}</option>)}
+              </select>}
+            </div>
+          ))}
+        </Card>
+      )}
+    </>
+  );
+}
+
+function Editor({ pres, usuario, puedeEditarProyecto, cuentas, onRefreshCuentas, onVolver, onCambio }) {
   const [partidas, setPartidas] = useState(null);
   const [cab, setCab] = useState({ nombre: pres.nombre, fecha_inicio: pres.fecha_inicio || "", fecha_fin: pres.fecha_fin || "" });
   const [guardado, setGuardado] = useState(null);
@@ -200,6 +337,7 @@ function Editor({ pres, usuario, puedeEditarProyecto, onVolver, onCambio }) {
 
       <Resumen pres={{ ...pres, ...cab }} partidas={partidas} />
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 13 }}>{aviso}</div>}
+      {(pres.estado === "vigente" || pres.estado === "reemplazado") && <Control pres={pres} partidas={partidas} cuentas={cuentas} usuario={usuario} puedeEditarProyecto={puedeEditarProyecto && pres.estado === "vigente"} onRefreshCuentas={onRefreshCuentas} />}
       <TablaPartidas partidas={partidas} setPartidas={setPartidas} editable={editable} />
 
       <Card>
@@ -225,7 +363,7 @@ function Editor({ pres, usuario, puedeEditarProyecto, onVolver, onCambio }) {
   );
 }
 
-export function Presupuestos({ usuario }) {
+export function Presupuestos({ usuario, cuentas = [], onRefreshCuentas }) {
   const [lista, setLista] = useState(null);
   const [proyecto, setProyecto] = useState(null);
   const [abierto, setAbierto] = useState(null);
@@ -242,7 +380,7 @@ export function Presupuestos({ usuario }) {
 
   if (!lista) return <div style={{ color: C.muted }}>Cargando...</div>;
   const pres = abierto && lista.find(p => p.id === abierto);
-  if (pres) return <Editor key={pres.id + pres.estado} pres={pres} usuario={usuario} puedeEditarProyecto={aCargo.includes(pres.project)} onVolver={() => setAbierto(null)} onCambio={(nuevo) => recargar(nuevo)} />;
+  if (pres) return <Editor key={pres.id + pres.estado} pres={pres} usuario={usuario} puedeEditarProyecto={aCargo.includes(pres.project)} cuentas={cuentas} onRefreshCuentas={onRefreshCuentas} onVolver={() => setAbierto(null)} onCambio={(nuevo) => recargar(nuevo)} />;
 
   const delProyecto = lista.filter(p => p.project === proyecto && (verReemplazados || p.estado !== "reemplazado"));
   const puedeCrear = aCargo.includes(proyecto);

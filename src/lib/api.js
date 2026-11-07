@@ -205,7 +205,7 @@ export async function loadCuentasCobro(){
   return data || [];
 }
 
-export async function crearCuentaCobro({project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, autor, autorId}){
+export async function crearCuentaCobro({project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, autor, autorId, partidaLinaje}){
   const row = {
     id: Date.now(),
     project, empresa: empresa||null, centro_costo: centroCosto||null, categoria: categoria||null, subcategoria: subcategoria||null, proveedor, concepto,
@@ -214,6 +214,7 @@ export async function crearCuentaCobro({project, empresa, centroCosto, categoria
     valor: +valor||0,
     observaciones: observaciones||null,
     soportes: soportes||[],
+    partida_linaje: partidaLinaje||null,
     estado: 'pendiente_contable',
     autor, autor_id: autorId,
     historial: [{accion:'Creado', por:autor, fecha:new Date().toISOString()}],
@@ -255,7 +256,7 @@ export async function marcarPagoRealizado(id, pagado, por){
 // Usada por el Ingeniero (autor) para corregir su propia cuenta antes de que
 // se apruebe. Si estaba "devuelto", la reenvía (vuelve a "pendiente_contable"
 // para que pase de nuevo por la revisión de contabilidad).
-export async function actualizarCuentaCobro(id, {project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes}, editor, estabaDevuelto){
+export async function actualizarCuentaCobro(id, {project, empresa, centroCosto, categoria, subcategoria, proveedor, concepto, cantidad, unidad, valor, observaciones, soportes, partidaLinaje}, editor, estabaDevuelto){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', id).single();
   const accion = estabaDevuelto ? 'Corregido y reenviado' : 'Editado';
   const historial = [...(actual?.historial||[]), {accion, por:editor, fecha:new Date().toISOString()}];
@@ -266,6 +267,7 @@ export async function actualizarCuentaCobro(id, {project, empresa, centroCosto, 
     valor: +valor||0,
     observaciones: observaciones||null,
     soportes: soportes||[],
+    partida_linaje: partidaLinaje||null,
     estado: estabaDevuelto ? 'pendiente_contable' : undefined,
     historial,
   }).eq('id', id);
@@ -441,6 +443,7 @@ export async function guardarPartidas(presupuestoId, partidas, anteriores){
   if(!partidas.length) return true;
   const num = v => v===''||v==null ? null : +v;
   const filas = partidas.map((p,i)=>({ id:p.id, presupuesto_id:presupuestoId, padre_id:p.padre_id||null, fase:p.fase, orden:i,
+    ...(p.linaje ? { linaje:p.linaje } : {}),
     nombre:p.nombre.trim(), unidad:p.unidad||null, cantidad:num(p.cantidad), precio_unitario:num(p.precio_unitario),
     fecha_inicio:p.fecha_inicio||null, fecha_fin:p.fecha_fin||null, notas:p.notas||null }));
   // Primero actividades y después subactividades, por la referencia al padre.
@@ -459,9 +462,48 @@ export async function crearVersionPresupuesto(pres, partidas, usuario){
     fecha_inicio:pres.fecha_inicio, fecha_fin:pres.fecha_fin, creado_por:usuario.id, creado_nombre:usuario.nombre });
   if(!nuevo) return null;
   const ids = {}; partidas.forEach(p=>{ ids[p.id]=crypto.randomUUID(); });
-  const copia = partidas.map(p=>({ ...p, id:ids[p.id], padre_id:p.padre_id?ids[p.padre_id]:null }));
+  // Mismo linaje: lo ejecutado (cuentas de cobro, ejecución manual) sigue a la actividad en la versión nueva.
+  const copia = partidas.map(p=>({ ...p, id:ids[p.id], padre_id:p.padre_id?ids[p.padre_id]:null, linaje:p.linaje }));
   if(!(await guardarPartidas(nuevo.id, copia, []))) return null;
   return nuevo;
+}
+
+// Actividades de los presupuestos vigentes del proyecto a las que se puede
+// cargar una cuenta de cobro (subactividades y actividades sin subactividades).
+export async function loadPartidasVigentes(project){
+  const { data: pres, error } = await supabase.from('presupuestos').select('id,nombre').eq('project', project).eq('estado','vigente');
+  if(error || !pres?.length) return [];
+  const { data: parts } = await supabase.from('partidas').select('*').in('presupuesto_id', pres.map(p=>p.id)).order('orden');
+  const { hojas, codigos } = await import('./controlPresupuesto.js');
+  return pres.flatMap(pr=>{
+    const ps = (parts||[]).filter(p=>p.presupuesto_id===pr.id);
+    const cod = codigos(ps), padre = Object.fromEntries(ps.map(p=>[p.id,p]));
+    return hojas(ps).map(p=>({ linaje:p.linaje, presupuesto:pr.nombre,
+      label:`${cod[p.id]} ${p.padre_id ? `${padre[p.padre_id]?.nombre} › ` : ''}${p.nombre}` }));
+  });
+}
+export async function loadEjecucionManual(project){
+  const { data, error } = await supabase.from('ejecucion_manual').select('*').eq('project', project).order('mes');
+  if(error){ console.error('Error cargando ejecución manual:', error); return []; }
+  return data || [];
+}
+export async function guardarEjecucionManual(fila){
+  const { error } = await supabase.from('ejecucion_manual').insert(fila);
+  if(error){ console.error('Error guardando ejecución manual:', error); alert(`⚠️ ${error.message}`); return false; }
+  return true;
+}
+export async function borrarEjecucionManual(id){
+  const { error } = await supabase.from('ejecucion_manual').delete().eq('id', id);
+  if(error){ console.error('Error borrando ejecución manual:', error); return false; }
+  return true;
+}
+// Carga una cuenta de cobro ya aprobada a una actividad del presupuesto.
+export async function asignarPartidaCuenta(cuentaId, linaje, por){
+  const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', cuentaId).single();
+  const historial = [...(actual?.historial||[]), {accion:'Cargada a actividad del presupuesto', por, fecha:new Date().toISOString()}];
+  const { data, error } = await supabase.from('cuentas_cobro').update({ partida_linaje: linaje, historial }).eq('id', cuentaId).select('id');
+  if(error || !data?.length){ console.error('Error asignando partida:', error); return false; }
+  return true;
 }
 
 export async function loadProveedores(){

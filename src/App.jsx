@@ -313,7 +313,7 @@ export default function App(){
           <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario} destinatarios={destinatarios}/>
         </div>
       )}
-        {tab==="presupuestos"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<Presupuestos usuario={usuario}/>}
+        {tab==="presupuestos"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<Presupuestos usuario={usuario} cuentas={cuentasCobro} onRefreshCuentas={async()=>setCuentasCobro(await loadCuentasCobro())}/>}
         {tab==="plan"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<PlanSemanal reports={reports} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&!editingReport&&<ResumenAyer reports={reports} proyectosVisibles={usuario.proyectosACargo||proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
         {tab==="nuevo"&&ingCoord&&!editingReport&&(

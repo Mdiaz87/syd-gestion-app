@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { C, INP, BTN_SM, PROJECTS, ACTIVIDADES_CATALOGO, UNIDADES, EMPRESAS, EMPRESAS_CENTROS_COSTO } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
-import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, marcarPagoRealizado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, enviarAGerencia, firmarGerencia, loadAprobadoresGerencia, loadProveedores, loadAlertasLegalizacion } from "../lib/api.js";
+import { crearCuentaCobro, actualizarCuentaCobro, subirSoporteCuentaCobro, marcarPagoRealizado, legalizarPago, aprobarCuentaPorPagar, enviarFacturaLegalizacion, enviarRevisionContable, enviarAGerencia, firmarGerencia, loadAprobadoresGerencia, loadProveedores, loadAlertasLegalizacion, loadPartidasVigentes } from "../lib/api.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
 
 const TAMANO_MAXIMO_SOPORTE = 15 * 1024 * 1024; // 15MB
@@ -74,6 +74,14 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   const bloqueado = !editando && bloqueadas.length > 0;
   const proyectosDisponibles = usuario.proyectoAsignado || PROJECTS;
   const [project, setProject] = useState(editando?.project || usuario.proyectoAsignado?.[0] || PROJECTS[0]);
+  // Actividad del presupuesto vigente a la que se carga la cuenta (obligatoria si el proyecto tiene presupuesto vigente).
+  const [partidaLinaje, setPartidaLinaje] = useState(editando?.partida_linaje || "");
+  const [opcionesPartida, setOpcionesPartida] = useState([]);
+  useEffect(() => {
+    let vivo = true;
+    loadPartidasVigentes(project).then(ops => { if (vivo) { setOpcionesPartida(ops); setPartidaLinaje(l => ops.some(o => o.linaje === l) ? l : ""); } });
+    return () => { vivo = false; };
+  }, [project]);
   const empresaInicial = editando?.empresa || "";
   const centroCostoInicial = editando?.centro_costo || "";
   const categoriaInicial = editando?.categoria || "";
@@ -157,6 +165,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
     if (!proveedor.trim()) { setError("⚠️ Escribe el proveedor/contratista."); return; }
     if (!conceptoFinal) { setError("⚠️ Escribe el concepto/actividad."); return; }
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
+    if (opcionesPartida.length && !partidaLinaje) { setError("⚠️ Escoge la actividad del presupuesto a la que se carga esta cuenta."); return; }
 
     setEnviando(true);
     const nuevosSubidos = [];
@@ -176,14 +185,14 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
     if (editando) {
       ok = await actualizarCuentaCobro(editando.id, {
         project, empresa, centroCosto, categoria, subcategoria, proveedor: proveedor.trim(), concepto: conceptoFinal,
-        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes,
+        cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(), soportes, partidaLinaje,
       }, usuario.nombre, editando.estado === "devuelto");
       cuentaId = editando.id;
     } else {
       cuentaId = await crearCuentaCobro({
         project, empresa, centroCosto, categoria, subcategoria, proveedor: proveedor.trim(), concepto: conceptoFinal,
         cantidad, unidad: unidadFinal, valor, observaciones: observaciones.trim(),
-        soportes, autor: usuario.nombre, autorId: usuario.id,
+        soportes, autor: usuario.nombre, autorId: usuario.id, partidaLinaje,
       });
       ok = !!cuentaId;
     }
@@ -237,6 +246,17 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
             {proveedores.map(p => <option key={p.nombre} value={p.nombre} />)}
           </datalist>
         </div>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ color: C.muted, fontSize: 12 }}>Actividad del presupuesto {opcionesPartida.length ? "(obligatoria)" : ""}</label>
+        {opcionesPartida.length ? (
+          <select style={INP} value={partidaLinaje} onChange={e => setPartidaLinaje(e.target.value)}>
+            <option value="">Escoge a qué actividad se carga…</option>
+            {[...new Set(opcionesPartida.map(o => o.presupuesto))].map(pr => (
+              <optgroup key={pr} label={pr}>{opcionesPartida.filter(o => o.presupuesto === pr).map(o => <option key={o.linaje} value={o.linaje}>{o.label}</option>)}</optgroup>
+            ))}
+          </select>
+        ) : <div style={{ color: C.muted, fontSize: 12, padding: "6px 0" }}>{project} todavía no tiene presupuesto aprobado: la cuenta queda sin actividad.</div>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
