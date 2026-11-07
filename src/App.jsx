@@ -16,6 +16,7 @@ import { LoginScreen } from "./components/LoginScreen.jsx";
 import { PanelAdmin } from "./components/PanelAdmin.jsx";
 import { CuentasCobro } from "./components/CuentasCobro.jsx";
 import { PlanSemanal } from "./components/PlanSemanal.jsx";
+import { Presupuestos } from "./components/Presupuestos.jsx";
 import { MiCaja } from "./components/MiCaja.jsx";
 import { sincronizarIngenieros } from "./lib/cajas.js";
 
@@ -195,9 +196,9 @@ export default function App(){
   const muestraCoord = usuario.rol==="Coordinador" || (ingCoord&&directivoForm==="coord");
   const muestraIng = usuario.rol==="Ingeniero" && (!ingCoord||directivoForm==="ing");
   const tabs = usuario.rol==="Directivo"
-    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
+    ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
-    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
+    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
 
   return (
@@ -312,6 +313,7 @@ export default function App(){
           <ReportsTable reports={reports} onSelect={setSelected} onEdit={startEdit} onDelete={setDeletingReport} usuario={usuario} destinatarios={destinatarios}/>
         </div>
       )}
+        {tab==="presupuestos"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<Presupuestos usuario={usuario}/>}
         {tab==="plan"&&(usuario.rol==="Directivo"||usuario.rol==="Ingeniero")&&<PlanSemanal reports={reports} usuario={usuario}/>}
         {tab==="nuevo"&&usuario.rol==="Ingeniero"&&!editingReport&&<ResumenAyer reports={reports} proyectosVisibles={usuario.proyectosACargo||proyectosVisibles} usuario={usuario} autoLeer={recienEntro}/>}
         {tab==="nuevo"&&ingCoord&&!editingReport&&(

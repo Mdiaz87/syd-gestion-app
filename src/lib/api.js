@@ -408,6 +408,62 @@ export async function guardarPlanSemanal(plan){
   return true;
 }
 
+// ── PRESUPUESTOS DE OBRA ──────────────────────────────────────────────────────
+export async function loadPresupuestos(){
+  const { data, error } = await supabase.from('presupuestos').select('*').order('project').order('nombre').order('version', {ascending:false});
+  if(error){ console.error('Error cargando presupuestos:', error); return []; }
+  return data || [];
+}
+export async function loadPartidas(presupuestoId){
+  const { data, error } = await supabase.from('partidas').select('*').eq('presupuesto_id', presupuestoId).order('orden');
+  if(error){ console.error('Error cargando partidas:', error); return []; }
+  // Actividades primero, cada una seguida de sus subactividades, en su orden.
+  const acts = (data||[]).filter(p=>!p.padre_id);
+  return acts.flatMap(a=>[a, ...(data||[]).filter(p=>p.padre_id===a.id)]);
+}
+// Crea (sin id) o actualiza un presupuesto. Devuelve la fila guardada o null.
+export async function guardarPresupuesto(campos){
+  const q = campos.id
+    ? supabase.from('presupuestos').update(campos).eq('id', campos.id)
+    : supabase.from('presupuestos').insert(campos);
+  const { data, error } = await q.select().single();
+  if(error){ console.error('Error guardando presupuesto:', error); alert(`⚠️ ${error.message}`); return null; }
+  return data;
+}
+// Guarda todas las partidas: borra las que se quitaron y guarda el resto con su orden.
+export async function guardarPartidas(presupuestoId, partidas, anteriores){
+  const vigentes = new Set(partidas.map(p=>p.id));
+  const quitadas = anteriores.filter(p=>!vigentes.has(p.id)).map(p=>p.id);
+  if(quitadas.length){
+    const { error } = await supabase.from('partidas').delete().in('id', quitadas);
+    if(error){ console.error('Error quitando partidas:', error); return false; }
+  }
+  if(!partidas.length) return true;
+  const num = v => v===''||v==null ? null : +v;
+  const filas = partidas.map((p,i)=>({ id:p.id, presupuesto_id:presupuestoId, padre_id:p.padre_id||null, fase:p.fase, orden:i,
+    nombre:p.nombre.trim(), unidad:p.unidad||null, cantidad:num(p.cantidad), precio_unitario:num(p.precio_unitario),
+    fecha_inicio:p.fecha_inicio||null, fecha_fin:p.fecha_fin||null, notas:p.notas||null }));
+  // Primero actividades y después subactividades, por la referencia al padre.
+  const { error } = await supabase.from('partidas').upsert([...filas.filter(f=>!f.padre_id), ...filas.filter(f=>f.padre_id)]);
+  if(error){ console.error('Error guardando partidas:', error); return false; }
+  return true;
+}
+export async function borrarPresupuesto(id){
+  const { error } = await supabase.from('presupuestos').delete().eq('id', id);
+  if(error){ console.error('Error borrando presupuesto:', error); alert(`⚠️ ${error.message}`); return false; }
+  return true;
+}
+// Copia un presupuesto vigente como borrador de la versión siguiente.
+export async function crearVersionPresupuesto(pres, partidas, usuario){
+  const nuevo = await guardarPresupuesto({ project:pres.project, nombre:pres.nombre, version:pres.version+1, base_id:pres.id,
+    fecha_inicio:pres.fecha_inicio, fecha_fin:pres.fecha_fin, creado_por:usuario.id, creado_nombre:usuario.nombre });
+  if(!nuevo) return null;
+  const ids = {}; partidas.forEach(p=>{ ids[p.id]=crypto.randomUUID(); });
+  const copia = partidas.map(p=>({ ...p, id:ids[p.id], padre_id:p.padre_id?ids[p.padre_id]:null }));
+  if(!(await guardarPartidas(nuevo.id, copia, []))) return null;
+  return nuevo;
+}
+
 export async function loadProveedores(){
   const { data, error } = await supabase.from('proveedores').select('nombre,nit').eq('estado','activo').order('nombre');
   if(error){ console.error('Error cargando proveedores:', error); return []; }
