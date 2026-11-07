@@ -4,6 +4,7 @@ import { fmt, emptyFrente, emptyGasto, emptyFinanciero, emptyTramite, proyectosD
 import { loadPresupuestoProyecto, savePresupuestoProyecto, verificarAlertasPresupuesto } from "../lib/api.js";
 import { Card, SectionTitle, PhotoUpload, CurrencyInput, Bar } from "./ui.jsx";
 import { GraficasFinanciero } from "./GraficasFinanciero.jsx";
+import { ResumenPresupuestos } from "./ResumenPresupuestos.jsx";
 
 // ── INGENIERO FORM ────────────────────────────────────────────────────────────
 export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports}){
@@ -269,6 +270,7 @@ export function IngForm({onSubmit, editingReport, onCancelEdit, usuario, reports
       ))}
       <button style={{...BTN_SM,width:"100%",padding:10,marginBottom:20,color:C.blueMid,borderColor:C.blueMid}} onClick={addFr}>+ Agregar frente de trabajo</button>
 
+      <ResumenPresupuestos key={project} proyectos={[project]} reports={reports} titulo={`📐 Presupuesto vigente de ${project} (automático)`}/>
       <Card style={{marginBottom:16}}>
         <SectionTitle color={C.blue}>Resumen Financiero Global del Proyecto</SectionTitle>
         {[{key:"pre_operativa",label:"PRE OPERATIVA",icon:"📋"},{key:"operativa",label:"OPERATIVA",icon:"⚙️"}].map(({key:faseKey,label:faseLabel,icon:faseIcon})=>{

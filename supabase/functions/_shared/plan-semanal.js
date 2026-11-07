@@ -46,7 +46,8 @@ export function estadoEntrega(plan, semana, hoy) {
 }
 
 // ── Coincidencia de actividades ───────────────────────────────────────────────
-export const normalizar = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+// ² y ³ se conservan como 2 y 3: si no, m² y m³ quedarían iguales.
+export const normalizar = (t) => String(t || "").replace(/²/g, "2").replace(/³/g, "3").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 const VACIAS = new Set(["de", "del", "la", "el", "los", "las", "y", "en", "a", "para", "con", "al"]);
 // Singular y plural cuentan igual: "ENTREGA DE LOTE" = "ENTREGA DE LOTES".
 const singular = (p) => p.length > 3 ? p.replace(/s$/, "").replace(/e$/, "") : p;

@@ -9,7 +9,7 @@ assert.equal(P.estadoEntrega(null, "2026-11-02", "2026-11-04").estado, "vencido"
 assert.equal(P.estadoEntrega({estado:"enviado",enviado_at:"2026-11-04T15:00:00Z"}, "2026-11-02", "2026-11-04").estado, "enviado_tarde");
 assert(P.mismaActividad("Limpieza de vías","limpieza de vias")); assert(P.mismaActividad("Limpieza de vías","Limpieza vías principal"));
 assert(!P.mismaActividad("Limpieza general","Limpieza de vías"));
-assert(P.mismaActividad("ENTREGA DE LOTE","Entrega de lotes")); assert(P.mismaActividad("AVANCE DE OBRA","AVANCE DE OBRAS"));
+assert(P.mismaActividad("ENTREGA DE LOTE","Entrega de lotes")); assert.notEqual(P.normalizar("m²"),P.normalizar("m³")); assert(P.mismaActividad("AVANCE DE OBRA","AVANCE DE OBRAS"));
 assert(P.mismaActividad("AMPLIACION DE LAGO","LIMPIEZA Y AMPLIACION DE LAGO")); assert(!P.mismaActividad("REDES DE GAS","REDES DE AGUA"));
 assert.deepEqual(P.actividadesRecientes([{role:"Coordinador",project:"Y",days:[{date:"2026-11-01",activities:[{actividad:"Otro",actividadOtro:"REDES DE GAS"},{actividad:"Otro",actividadOtro:"redes de gas"}]}]}],"Y","2026-11-03"),["REDES DE GAS"]);
 const day=(date,acts,o={})=>({date,climaPrincipal:"Soleado",activities:acts,novelties:"",...o});

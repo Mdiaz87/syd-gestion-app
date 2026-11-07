@@ -444,6 +444,7 @@ export async function guardarPartidas(presupuestoId, partidas, anteriores){
   const num = v => v===''||v==null ? null : +v;
   const filas = partidas.map((p,i)=>({ id:p.id, presupuesto_id:presupuestoId, padre_id:p.padre_id||null, fase:p.fase, orden:i,
     ...(p.linaje ? { linaje:p.linaje } : {}),
+    soportes:Array.isArray(p.soportes) ? p.soportes : [],
     nombre:p.nombre.trim(), unidad:p.unidad||null, cantidad:num(p.cantidad), precio_unitario:num(p.precio_unitario),
     fecha_inicio:p.fecha_inicio||null, fecha_fin:p.fecha_fin||null, notas:p.notas||null }));
   // Primero actividades y después subactividades, por la referencia al padre.
@@ -465,6 +466,12 @@ export async function crearVersionPresupuesto(pres, partidas, usuario){
   // Mismo linaje: lo ejecutado (cuentas de cobro, ejecución manual) sigue a la actividad en la versión nueva.
   const copia = partidas.map(p=>({ ...p, id:ids[p.id], padre_id:p.padre_id?ids[p.padre_id]:null, linaje:p.linaje }));
   if(!(await guardarPartidas(nuevo.id, copia, []))) return null;
+  // El análisis de precios unitarios también pasa a la versión nueva.
+  const apu = await loadApu(partidas.map(p=>p.id));
+  if(apu.length){
+    const { error } = await supabase.from('apu_insumos').insert(apu.map(({id, partida_id, ...x})=>({ ...x, partida_id: ids[partida_id] })));
+    if(error) console.error('Error copiando APU:', error);
+  }
   return nuevo;
 }
 
@@ -479,7 +486,7 @@ export async function loadPartidasVigentes(project){
     const ps = (parts||[]).filter(p=>p.presupuesto_id===pr.id);
     const cod = codigos(ps), padre = Object.fromEntries(ps.map(p=>[p.id,p]));
     return hojas(ps).map(p=>({ linaje:p.linaje, presupuesto:pr.nombre,
-      label:`${cod[p.id]} ${p.padre_id ? `${padre[p.padre_id]?.nombre} › ` : ''}${p.nombre}` }));
+      nombre:p.nombre, label:`${cod[p.id]} ${p.padre_id ? `${padre[p.padre_id]?.nombre} › ` : ''}${p.nombre}` }));
   });
 }
 export async function loadEjecucionManual(project){
@@ -497,6 +504,58 @@ export async function borrarEjecucionManual(id){
   if(error){ console.error('Error borrando ejecución manual:', error); return false; }
   return true;
 }
+// Avance físico: el último registro por actividad es el vigente.
+export async function loadAvances(project){
+  const { data, error } = await supabase.from('avance_fisico').select('*').eq('project', project).order('created_at');
+  if(error){ console.error('Error cargando avance físico:', error); return []; }
+  return data || [];
+}
+export async function registrarAvance(fila){
+  const { error } = await supabase.from('avance_fisico').insert(fila);
+  if(error){ console.error('Error registrando avance:', error); alert(`⚠️ ${error.message}`); return false; }
+  return true;
+}
+// Análisis de precios unitarios.
+export async function loadApu(partidaIds){
+  if(!partidaIds.length) return [];
+  const { data, error } = await supabase.from('apu_insumos').select('*').in('partida_id', partidaIds).order('orden');
+  if(error){ console.error('Error cargando APU:', error); return []; }
+  return data || [];
+}
+export async function guardarApu(partidaId, insumos){
+  const { error: e1 } = await supabase.from('apu_insumos').delete().eq('partida_id', partidaId);
+  if(e1){ console.error('Error guardando APU:', e1); alert(`⚠️ ${e1.message}`); return false; }
+  if(!insumos.length) return true;
+  const num = v => v===''||v==null ? null : +v;
+  const { error } = await supabase.from('apu_insumos').insert(insumos.map((x,i)=>({ partida_id:partidaId, tipo:x.tipo, descripcion:x.descripcion.trim(), unidad:x.unidad||null, cantidad:num(x.cantidad), precio:num(x.precio), orden:i })));
+  if(error){ console.error('Error guardando APU:', error); alert(`⚠️ ${error.message}`); return false; }
+  return true;
+}
+// Costo compartido: un gasto repartido entre actividades de varios proyectos.
+export async function guardarCostoCompartido(partes, valorTotal, mes, nota){
+  const grupo = crypto.randomUUID();
+  const filas = partes.map(p=>({ project:p.project, linaje:p.linaje, mes, grupo_id:grupo, pct:+p.pct,
+    valor: Math.round(valorTotal * (+p.pct) / 100), nota:`Compartido ${p.pct}% de $${Math.round(valorTotal).toLocaleString('es-CO')}${nota ? ` — ${nota}` : ''}` }));
+  const { error } = await supabase.from('ejecucion_manual').insert(filas);
+  if(error){ console.error('Error guardando costo compartido:', error); alert(`⚠️ ${error.message}`); return false; }
+  return true;
+}
+// Todo lo necesario para el control de los presupuestos vigentes (Dashboard, informe mensual).
+export async function loadControlVigentes(proyectos){
+  let q = supabase.from('presupuestos').select('*').eq('estado','vigente');
+  if(proyectos) q = q.in('project', proyectos);
+  const { data: pres, error } = await q;
+  if(error || !pres?.length) return [];
+  const projs = [...new Set(pres.map(p=>p.project))];
+  const [{ data: parts }, { data: manuales }, { data: avances }] = await Promise.all([
+    supabase.from('partidas').select('*').in('presupuesto_id', pres.map(p=>p.id)).order('orden'),
+    supabase.from('ejecucion_manual').select('*').in('project', projs),
+    supabase.from('avance_fisico').select('*').in('project', projs),
+  ]);
+  return pres.map(p=>({ pres:p, partidas:(parts||[]).filter(x=>x.presupuesto_id===p.id),
+    manuales:(manuales||[]).filter(x=>x.project===p.project), avances:(avances||[]).filter(x=>x.project===p.project) }));
+}
+
 // Carga una cuenta de cobro ya aprobada a una actividad del presupuesto.
 export async function asignarPartidaCuenta(cuentaId, linaje, por){
   const { data: actual } = await supabase.from('cuentas_cobro').select('historial').eq('id', cuentaId).single();

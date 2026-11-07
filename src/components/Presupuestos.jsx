@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, Fragment } from "react";
 import { C, INP, BTN_SM, PROJECTS, PROYECTOS_SIN_OBRA, UNIDADES } from "../lib/constants.js";
 import { fmt } from "../lib/helpers.js";
 import { loadPresupuestos, loadPartidas, guardarPresupuesto, guardarPartidas, borrarPresupuesto, crearVersionPresupuesto, loadEjecucionManual, guardarEjecucionManual, borrarEjecucionManual, asignarPartidaCuenta } from "../lib/api.js";
-import { controlPresupuesto, codigos, hojas, valorCuenta } from "../lib/controlPresupuesto.js";
+import { controlPresupuesto, codigos, hojas, valorCuenta, alertasPresupuesto } from "../lib/controlPresupuesto.js";
+import { loadAvances, registrarAvance, loadApu, guardarApu, guardarCostoCompartido, loadPartidasVigentes, subirSoporteCuentaCobro } from "../lib/api.js";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Card, SectionTitle } from "./ui.jsx";
 
@@ -65,7 +66,80 @@ function Resumen({ pres, partidas }) {
   );
 }
 
-function TablaPartidas({ partidas, setPartidas, editable }) {
+const TIPOS_APU = [["mano_obra", "Mano de obra"], ["material", "Materiales"], ["equipo", "Equipos y herramientas"], ["transporte", "Transporte"], ["subcontrato", "Subcontratos"]];
+
+// Análisis de precios unitarios: insumos por unidad de la actividad; su suma es el precio unitario.
+function ApuModal({ partida, editable, onUsarPU, onClose }) {
+  const [insumos, setInsumos] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { loadApu([partida.id]).then(setInsumos); }, [partida.id]);
+  const set = (i, k, v) => setInsumos(xs => xs.map((x, j) => j === i ? { ...x, [k]: v } : x));
+  const total = (insumos || []).reduce((s, x) => s + num(x.cantidad) * num(x.precio), 0);
+  const guardar = async (usar) => {
+    if (insumos.some(x => !x.descripcion.trim())) { alert("Hay insumos sin descripción."); return; }
+    setGuardando(true); const ok = await guardarApu(partida.id, insumos); setGuardando(false);
+    if (ok) { if (usar) onUsarPU(Math.round(total * 100) / 100); onClose(); }
+  };
+  const inp = { ...INP, padding: "4px 7px", fontSize: 12.5 };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
+      <div style={{ background: C.bgCard, borderRadius: 16, padding: 22, maxWidth: 900, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <h3 style={{ color: C.blue, margin: "0 0 2px" }}>Análisis de precio unitario</h3>
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 12 }}>{partida.nombre} · por {partida.unidad || "unidad"}</div>
+        {!insumos ? <div style={{ color: C.muted }}>Cargando...</div> : (
+          <>
+            {TIPOS_APU.map(([tipo, label]) => {
+              const filas = insumos.map((x, i) => ({ x, i })).filter(({ x }) => x.tipo === tipo);
+              if (!filas.length && !editable) return null;
+              const sub = filas.reduce((s, { x }) => s + num(x.cantidad) * num(x.precio), 0);
+              return (
+                <div key={tipo} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, color: C.blue, fontSize: 13, marginBottom: 4 }}><span>{label}</span><span>{sub ? fmt(sub) : ""}</span></div>
+                  {filas.map(({ x, i }) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(180px,2fr) 80px 110px 130px 120px 30px", gap: 6, marginBottom: 4, alignItems: "center", fontSize: 12.5 }}>
+                      {editable ? <>
+                        <input style={inp} placeholder="Descripción" value={x.descripcion} onChange={e => set(i, "descripcion", e.target.value)} />
+                        <input style={inp} placeholder="Und" value={x.unidad || ""} onChange={e => set(i, "unidad", e.target.value)} />
+                        <input style={inp} type="number" min="0" step="any" placeholder="Cant./rend." value={x.cantidad ?? ""} onChange={e => set(i, "cantidad", e.target.value)} />
+                        <input style={inp} type="number" min="0" placeholder="Precio" value={x.precio ?? ""} onChange={e => set(i, "precio", e.target.value)} />
+                      </> : <><span>{x.descripcion}</span><span>{x.unidad}</span><span>{x.cantidad}</span><span>{fmt(x.precio)}</span></>}
+                      <span style={{ textAlign: "right" }}>{fmt(num(x.cantidad) * num(x.precio))}</span>
+                      {editable ? <button onClick={() => setInsumos(xs => xs.filter((_, j) => j !== i))} style={{ ...BTN_SM, padding: "2px 6px", color: C.danger }}>✕</button> : <span />}
+                    </div>
+                  ))}
+                  {editable && <button onClick={() => setInsumos(xs => [...xs, { tipo, descripcion: "", unidad: "", cantidad: "", precio: "" }])} style={{ ...BTN_SM, padding: "2px 8px", fontSize: 11.5, color: C.blueMid, borderColor: C.blueMid }}>+ {label}</button>}
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, color: C.blue, fontSize: 15, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+              <span>Precio unitario calculado</span><span>{total ? fmt(total) : "$ 0"}</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <button onClick={onClose} style={{ ...BTN_SM, padding: "9px 14px" }}>{editable ? "Cancelar" : "Cerrar"}</button>
+              {editable && <button onClick={() => guardar(false)} disabled={guardando} style={{ ...BTN_SM, padding: "9px 14px", color: C.blueMid, borderColor: C.blueMid, fontWeight: 700 }}>Guardar análisis</button>}
+              {editable && <button onClick={() => guardar(true)} disabled={guardando || !total} style={{ background: total ? C.blue : C.border, color: "#fff", border: "none", borderRadius: 12, padding: "9px 16px", fontWeight: 700, cursor: total ? "pointer" : "default" }}>Guardar y usar como precio unitario</button>}
+            </div>
+            {editable && <div style={{ color: C.muted, fontSize: 11.5, marginTop: 8 }}>El análisis se guarda de una vez. Si lo usas como precio unitario, recuerda tocar "Guardar cambios" en el presupuesto.</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const fileToBase64 = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
+
+function TablaPartidas({ partidas, setPartidas, editable, project }) {
+  const [apuDe, setApuDe] = useState(null);
+  const [subiendo, setSubiendo] = useState(null);
+  const subirSoporte = async (p, file) => {
+    if (file.size > 15 * 1024 * 1024) { alert("El archivo pesa más de 15MB."); return; }
+    setSubiendo(p.id);
+    const url = await subirSoporteCuentaCobro({ project, fileName: `Presupuesto - ${file.name}`, base64: await fileToBase64(file) });
+    setSubiendo(null);
+    if (!url) { alert("No se pudo subir el archivo a Drive."); return; }
+    setPartidas(ps => ps.map(x => x.id === p.id ? { ...x, soportes: [...(x.soportes || []), { nombre: file.name, url }] } : x));
+  };
   const { t, hijos } = totalesPorPartida(partidas);
   const set = (id, k, v) => setPartidas(ps => ps.map(p => p.id === id ? { ...p, [k]: v } : p));
   const quitar = (id) => setPartidas(ps => ps.filter(p => p.id !== id && p.padre_id !== id));
@@ -82,6 +156,14 @@ function TablaPartidas({ partidas, setPartidas, editable }) {
 
   const fila = (p, codigo, esSub) => {
     const tieneHijos = !esSub && hijos[p.id]?.length;
+    const soportes = p.soportes || [];
+    const extras = !tieneHijos && (
+      <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+        <button title={p._nueva ? "Guarda el presupuesto primero" : "Análisis de precio unitario"} disabled={p._nueva} onClick={() => setApuDe(p)} style={{ ...BTN_SM, padding: "1px 7px", fontSize: 11 }}>APU</button>
+        {soportes.map((s, i) => <span key={i} style={{ ...BTN_SM, padding: "1px 7px", fontSize: 11, display: "inline-flex", gap: 4 }}><a href={s.url} target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: "none" }}>📎 {s.nombre.length > 18 ? s.nombre.slice(0, 18) + "…" : s.nombre}</a>{editable && <span style={{ color: C.danger, cursor: "pointer" }} onClick={() => setPartidas(ps => ps.map(x => x.id === p.id ? { ...x, soportes: soportes.filter((_, j) => j !== i) } : x))}>✕</span>}</span>)}
+        {editable && <label style={{ ...BTN_SM, padding: "1px 7px", fontSize: 11, cursor: "pointer" }}>{subiendo === p.id ? "Subiendo…" : "+ Cotización"}<input type="file" accept="application/pdf,image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) subirSoporte(p, f); }} /></label>}
+      </div>
+    );
     const tot = t[p.id];
     return (
       <tr key={p.id} style={{ background: esSub ? undefined : C.bgCard2 }}>
@@ -89,6 +171,7 @@ function TablaPartidas({ partidas, setPartidas, editable }) {
         <td style={{ ...celda, paddingLeft: esSub ? 22 : 6, minWidth: 220 }}>
           {editable ? <input style={{ ...inp, fontWeight: esSub ? 400 : 700 }} placeholder={esSub ? "Subactividad" : "Actividad"} value={p.nombre} onChange={e => set(p.id, "nombre", e.target.value)} />
             : <span style={{ fontWeight: esSub ? 400 : 700, fontSize: 13 }}>{p.nombre}</span>}
+          {extras}
         </td>
         {tieneHijos ? <td colSpan={3} style={{ ...celda, color: C.muted, fontSize: 11.5 }}>Suma de sus subactividades</td> : <>
           <td style={{ ...celda, width: 90 }}>{editable ? <select style={inp} value={p.unidad || ""} onChange={e => set(p.id, "unidad", e.target.value)}>{[...UNIDADES.filter(u => u !== "Otro"), "GLB", "kg", "m"].map(u => <option key={u}>{u}</option>)}</select> : <span style={{ fontSize: 12.5 }}>{p.unidad}</span>}</td>
@@ -112,6 +195,7 @@ function TablaPartidas({ partidas, setPartidas, editable }) {
 
   return (
     <>
+      {apuDe && <ApuModal partida={apuDe} editable={editable} onClose={() => setApuDe(null)} onUsarPU={(pu) => setPartidas(ps => ps.map(x => x.id === apuDe.id ? { ...x, precio_unitario: pu } : x))} />}
       {FASES.map(f => {
         const acts = partidas.filter(p => p.fase === f.key && !p.padre_id);
         const subtotal = acts.reduce((s, p) => s + t[p.id], 0);
@@ -152,16 +236,22 @@ const etiquetaMes = (m) => `${MESES_C[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}`;
 const millones = (v) => `$${Math.round(v / 1e6).toLocaleString("es-CO")}M`;
 const hoyCol = () => new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
 
-function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefreshCuentas }) {
+function Control({ pres, partidas, cuentas, reports, usuario, puedeEditarProyecto, onRefreshCuentas }) {
   const [manuales, setManuales] = useState([]);
+  const [avances, setAvances] = useState([]);
+  const [fis, setFis] = useState({ pct: "", nota: "" });
+  // Costo compartido: el mismo gasto repartido entre actividades de varios proyectos.
+  const [compartido, setCompartido] = useState(false);
+  const [partes, setPartes] = useState([]);
+  const [opcionesOtros, setOpcionesOtros] = useState({});
   const [form, setForm] = useState({ linaje: "", mes: hoyCol().slice(0, 7), valor: "", nota: "" });
   const [abierta, setAbierta] = useState(null);
-  const recargar = () => loadEjecucionManual(pres.project).then(setManuales);
+  const recargar = () => { loadEjecucionManual(pres.project).then(setManuales); loadAvances(pres.project).then(setAvances); };
   useEffect(() => { recargar(); }, [pres.project]);
 
   const hoy = hoyCol();
   const delProyecto = cuentas.filter(c => c.project === pres.project);
-  const c = controlPresupuesto(pres, partidas, delProyecto, manuales, hoy);
+  const c = controlPresupuesto(pres, partidas, delProyecto, manuales, hoy, { avances, reports });
   const cod = codigos(partidas);
   const padre = Object.fromEntries(partidas.map(p => [p.id, p]));
   const nombre = (p) => `${cod[p.id]} ${p.padre_id ? `${padre[p.padre_id]?.nombre} › ` : ""}${p.nombre}`;
@@ -176,7 +266,26 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
       {sub && <div style={{ color: C.muted, fontSize: 11 }}>{sub}</div>}
     </div>
   );
+  const alertas = alertasPresupuesto(c, nombre);
+  const guardarFisico = async (linaje) => {
+    const pct = +fis.pct;
+    if (fis.pct === "" || !(pct >= 0 && pct <= 100)) { alert("Escribe un % entre 0 y 100."); return; }
+    if (await registrarAvance({ project: pres.project, linaje, pct, nota: fis.nota.trim() || null })) { setFis({ pct: "", nota: "" }); recargar(); }
+  };
+  const cargarOpciones = async (project) => {
+    if (opcionesOtros[project]) return;
+    const ops = project === pres.project ? opciones.map(p => ({ linaje: p.linaje, label: nombre(p) })) : await loadPartidasVigentes(project);
+    setOpcionesOtros(o => ({ ...o, [project]: ops }));
+  };
+  const sumaPartes = partes.reduce((s, x) => s + (+x.pct || 0), 0);
   const agregarManual = async () => {
+    if (compartido) {
+      const todas = [{ project: pres.project, linaje: form.linaje, pct: 100 - partes.reduce((s, x) => s + (+x.pct || 0), 0) }, ...partes];
+      if (!form.linaje || !(+form.valor > 0) || !form.mes) { alert("Escoge la actividad de este proyecto, el mes y el valor total."); return; }
+      if (todas.some(x => !x.linaje || !(+x.pct > 0))) { alert("Cada parte necesita proyecto, actividad y un % mayor a cero, y los % no pueden pasar de 100."); return; }
+      if (await guardarCostoCompartido(todas, +form.valor, `${form.mes}-01`, form.nota.trim())) { setForm(f => ({ ...f, valor: "", nota: "" })); setPartes([]); setCompartido(false); recargar(); }
+      return;
+    }
     if (!form.linaje || !(+form.valor > 0) || !form.mes) { alert("Escoge la actividad, el mes y un valor mayor a cero."); return; }
     if (await guardarEjecucionManual({ project: pres.project, linaje: form.linaje, mes: `${form.mes}-01`, valor: +form.valor, nota: form.nota.trim() || null, creado_por: usuario.id, creado_nombre: usuario.nombre })) {
       setForm(f => ({ ...f, valor: "", nota: "" })); recargar();
@@ -192,7 +301,14 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
           {kpi("Programado a hoy", `${c.pctProgramado.toFixed(1)}%`, fmt(c.proyectadoHoy) === "-" ? "$ 0" : fmt(c.proyectadoHoy))}
           {kpi("Diferencia", `${brecha >= 0 ? "+" : ""}${brecha.toFixed(1)} pts`, brecha > 5 ? "Se ha ejecutado más de lo programado" : brecha < -5 ? "Va por debajo de lo programado" : "En línea con lo programado", brecha > 5 ? C.danger : brecha < -5 ? C.warn : C.green)}
           {kpi("Aprobado sin pagar", fmt(c.comprometido) === "-" ? "$ 0" : fmt(c.comprometido), c.tramite ? `${fmt(c.tramite)} más en trámite` : "Nada en trámite")}
+          {kpi("Avance físico", `${c.pctFisico.toFixed(1)}%`, c.sinFisico ? `${c.sinFisico} actividad${c.sinFisico === 1 ? "" : "es"} sin registrar` : "Ponderado por valor", c.pctFinanciero - c.pctFisico > 10 ? C.danger : C.blue)}
         </div>
+        {alertas.length > 0 && (
+          <div style={{ background: C.danger + "0c", border: `1px solid ${C.danger}44`, borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+            <div style={{ color: C.danger, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Alertas ({alertas.length})</div>
+            {alertas.map((a, i) => <div key={i} style={{ fontSize: 12.5, color: a.nivel === "alta" ? C.danger : C.warn }}>{a.tipo === "brecha" ? "💸" : a.tipo === "atraso" ? "⏰" : a.tipo === "sobrecosto" ? "🔴" : "⚠️"} <span style={{ color: C.text }}>{a.texto}</span></div>)}
+          </div>
+        )}
         {c.mensual.length > 0 && (
           <div style={{ height: 280 }}>
             <ResponsiveContainer>
@@ -219,7 +335,7 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
             <thead><tr style={{ color: C.muted, fontSize: 10.5, textAlign: "left", textTransform: "uppercase", letterSpacing: .4 }}>
-              {["Actividad", "Presupuesto", "Programado a hoy", "Ejecutado", "Aprobado sin pagar", "En trámite", "% ejecutado", "Saldo", ""].map((h, i) => <th key={i} style={{ padding: 6, borderBottom: `1px solid ${C.border}`, textAlign: i && i < 8 ? "right" : "left" }}>{h}</th>)}
+              {["Actividad", "Presupuesto", "Programado a hoy", "Ejecutado", "Aprobado sin pagar", "En trámite", "% ejecutado", "% físico", "Saldo", ""].map((h, i) => <th key={i} style={{ padding: 6, borderBottom: `1px solid ${C.border}`, textAlign: i && i < 9 ? "right" : "left" }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {c.filas.map(f => (
@@ -232,11 +348,27 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
                     <td style={{ padding: 6, textAlign: "right" }}>{fmt(f.comprometido)}</td>
                     <td style={{ padding: 6, textAlign: "right", color: C.muted }}>{fmt(f.tramite)}</td>
                     <td style={{ padding: 6, textAlign: "right" }}>{f.pct == null ? "—" : `${f.pct.toFixed(1)}%`}</td>
+                    <td style={{ padding: 6, textAlign: "right", color: f.alertaBrecha ? C.danger : C.text, fontWeight: f.alertaBrecha ? 700 : 400 }} title={f.fisicoFecha ? `Registrado el ${fechaCorta(f.fisicoFecha)} por ${f.fisicoPor || "—"}` : "Sin registro"}>
+                      {f.fisico == null ? "—" : `${f.fisico}%`}
+                      {f.sugerido != null && <div style={{ color: C.muted, fontSize: 10.5, fontWeight: 400 }}>coord.: {f.sugerido}%</div>}
+                    </td>
                     <td style={{ padding: 6, textAlign: "right", color: f.saldo < 0 ? C.danger : C.text, fontWeight: f.saldo < 0 ? 700 : 400 }}>{fmt(f.saldo) === "-" ? "$ 0" : fmt(f.saldo)}</td>
-                    <td style={{ padding: 6, whiteSpace: "nowrap", color: f.alerta === "sobrecosto" ? C.danger : C.warn, fontWeight: 700, fontSize: 11 }}>{f.alerta === "sobrecosto" ? "🔴 Sobrecosto" : f.alerta === "cerca" ? "⚠️ +90%" : ""}</td>
+                    <td style={{ padding: 6, whiteSpace: "nowrap", color: f.alerta === "sobrecosto" ? C.danger : C.warn, fontWeight: 700, fontSize: 11 }}>{f.alerta === "sobrecosto" ? "🔴 Sobrecosto" : f.alerta === "cerca" ? "⚠️ +90%" : ""}{f.alertaBrecha ? " 💸" : ""}{f.atraso ? " ⏰" : ""}</td>
                   </tr>
                   {abierta === f.partida.linaje && (
-                    <tr key={f.partida.linaje + "-d"}><td colSpan={9} style={{ padding: "6px 10px 12px", background: C.bgCard2, fontSize: 12 }}>
+                    <tr key={f.partida.linaje + "-d"}><td colSpan={10} style={{ padding: "6px 10px 12px", background: C.bgCard2, fontSize: 12 }}>
+                      <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                        <b>Avance físico:</b> {f.fisico == null ? "sin registro" : `${f.fisico}% (${fechaCorta(f.fisicoFecha)}, ${f.fisicoPor || "—"})`}
+                        {f.sugerido != null && <span style={{ color: C.muted }}> · según los registros de los coordinadores: {f.sugerido}% de {f.partida.cantidad} {f.partida.unidad}</span>}
+                        {puedeEditarProyecto && (
+                          <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            <input style={{ ...INP, width: 90, padding: "4px 8px" }} type="number" min="0" max="100" placeholder="%" value={fis.pct} onChange={e => setFis(x => ({ ...x, pct: e.target.value }))} />
+                            {f.sugerido != null && <button onClick={() => setFis(x => ({ ...x, pct: String(f.sugerido) }))} style={{ ...BTN_SM, padding: "4px 8px" }}>Usar {f.sugerido}%</button>}
+                            <input style={{ ...INP, flex: "1 1 200px", padding: "4px 8px" }} placeholder="Nota (cómo se verificó)" value={fis.nota} onChange={e => setFis(x => ({ ...x, nota: e.target.value }))} />
+                            <button onClick={() => guardarFisico(f.partida.linaje)} style={{ ...BTN_SM, padding: "4px 10px", color: C.blueMid, borderColor: C.blueMid, fontWeight: 700 }}>Registrar avance</button>
+                          </div>
+                        )}
+                      </div>
                       {f.cuentas.length ? f.cuentas.map(x => <div key={x.id}>{x._tipo === "pagado" ? "✅" : x._tipo === "comprometido" ? "⏳" : "📝"} {x.proveedor} · {x.concepto} · <b>{fmt(valorCuenta(x))}</b> · {x.autor}</div>) : <div style={{ color: C.muted }}>Sin cuentas de cobro cargadas.</div>}
                       {manuales.filter(m => m.linaje === f.partida.linaje).map(m => <div key={m.id}>✍️ Manual {etiquetaMes(String(m.mes).slice(0, 7))} · <b>{fmt(m.valor)}</b>{m.nota ? ` · ${m.nota}` : ""} · {m.creado_nombre} {puedeEditarProyecto && <button onClick={async (e) => { e.stopPropagation(); if (window.confirm("¿Quitar este registro manual?") && await borrarEjecucionManual(m.id)) recargar(); }} style={{ ...BTN_SM, padding: "0 6px", color: C.danger }}>✕</button>}</div>)}
                     </td></tr>
@@ -252,13 +384,36 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
         <Card style={{ marginBottom: 16 }}>
           <SectionTitle>Ejecución manual</SectionTitle>
           <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>Para lo que no pasa por cuentas de cobro: pagos directos, costos compartidos o lo ejecutado antes de usar la app.</div>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, marginBottom: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={compartido} onChange={e => { setCompartido(e.target.checked); setPartes([]); }} /> Es un costo compartido con otros proyectos o etapas (se reparte por %)
+          </label>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(200px,2fr) 140px 150px minmax(160px,2fr) auto", gap: 8, alignItems: "end" }}>
             <select style={INP} value={form.linaje} onChange={e => setForm(f => ({ ...f, linaje: e.target.value }))}><option value="">Actividad…</option>{opciones.map(p => <option key={p.linaje} value={p.linaje}>{nombre(p)}</option>)}</select>
             <input style={INP} type="month" value={form.mes} onChange={e => setForm(f => ({ ...f, mes: e.target.value }))} />
-            <input style={INP} type="number" min="0" placeholder="Valor" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} />
+            <input style={INP} type="number" min="0" placeholder={compartido ? "Valor total" : "Valor"} value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} />
             <input style={INP} placeholder="Nota (de dónde sale)" value={form.nota} onChange={e => setForm(f => ({ ...f, nota: e.target.value }))} />
             <button onClick={agregarManual} style={{ ...BTN_SM, padding: "9px 14px", color: C.blueMid, borderColor: C.blueMid, fontWeight: 700 }}>Agregar</button>
           </div>
+          {compartido && (
+            <div style={{ marginTop: 10, background: C.bgCard2, borderRadius: 8, padding: 10, fontSize: 12.5 }}>
+              <div style={{ marginBottom: 6 }}><b>{pres.project}</b> (la actividad de arriba) se queda con el <b>{Math.max(0, 100 - sumaPartes)}%</b>{+form.valor > 0 ? ` = ${fmt(Math.round(+form.valor * Math.max(0, 100 - sumaPartes) / 100))}` : ""}.</div>
+              {partes.map((x, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "200px minmax(200px,1fr) 90px auto", gap: 6, marginBottom: 6 }}>
+                  <select style={INP} value={x.project} onChange={e => { const v = e.target.value; cargarOpciones(v); setPartes(ps => ps.map((y, j) => j === i ? { ...y, project: v, linaje: "" } : y)); }}>
+                    <option value="">Proyecto…</option>{PROJECTS.filter(pr => !PROYECTOS_SIN_OBRA.includes(pr)).map(pr => <option key={pr}>{pr}</option>)}
+                  </select>
+                  <select style={INP} value={x.linaje} onChange={e => setPartes(ps => ps.map((y, j) => j === i ? { ...y, linaje: e.target.value } : y))}>
+                    <option value="">{x.project && opcionesOtros[x.project] && !opcionesOtros[x.project].length ? "Ese proyecto no tiene presupuesto aprobado" : "Actividad…"}</option>
+                    {(opcionesOtros[x.project] || []).map(o => <option key={o.linaje} value={o.linaje}>{o.presupuesto ? `${o.presupuesto} · ` : ""}{o.label}</option>)}
+                  </select>
+                  <input style={INP} type="number" min="0" max="100" placeholder="%" value={x.pct} onChange={e => setPartes(ps => ps.map((y, j) => j === i ? { ...y, pct: e.target.value } : y))} />
+                  <button onClick={() => setPartes(ps => ps.filter((_, j) => j !== i))} style={{ ...BTN_SM, color: C.danger }}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => setPartes(ps => [...ps, { project: "", linaje: "", pct: "" }])} style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }}>+ Repartir con otro proyecto o etapa</button>
+              {sumaPartes >= 100 && <div style={{ color: C.danger, marginTop: 6 }}>Los % de las otras partes suman {sumaPartes}%: no le queda nada a {pres.project}.</div>}
+            </div>
+          )}
         </Card>
       )}
 
@@ -280,7 +435,7 @@ function Control({ pres, partidas, cuentas, usuario, puedeEditarProyecto, onRefr
   );
 }
 
-function Editor({ pres, usuario, puedeEditarProyecto, cuentas, onRefreshCuentas, onVolver, onCambio }) {
+function Editor({ pres, usuario, puedeEditarProyecto, cuentas, reports, onRefreshCuentas, onVolver, onCambio }) {
   const [partidas, setPartidas] = useState(null);
   const [cab, setCab] = useState({ nombre: pres.nombre, fecha_inicio: pres.fecha_inicio || "", fecha_fin: pres.fecha_fin || "" });
   const [guardado, setGuardado] = useState(null);
@@ -337,8 +492,8 @@ function Editor({ pres, usuario, puedeEditarProyecto, cuentas, onRefreshCuentas,
 
       <Resumen pres={{ ...pres, ...cab }} partidas={partidas} />
       {aviso && <div style={{ background: C.bgCard2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 13 }}>{aviso}</div>}
-      {(pres.estado === "vigente" || pres.estado === "reemplazado") && <Control pres={pres} partidas={partidas} cuentas={cuentas} usuario={usuario} puedeEditarProyecto={puedeEditarProyecto && pres.estado === "vigente"} onRefreshCuentas={onRefreshCuentas} />}
-      <TablaPartidas partidas={partidas} setPartidas={setPartidas} editable={editable} />
+      {(pres.estado === "vigente" || pres.estado === "reemplazado") && <Control pres={pres} partidas={partidas} cuentas={cuentas} reports={reports} usuario={usuario} puedeEditarProyecto={puedeEditarProyecto && pres.estado === "vigente"} onRefreshCuentas={onRefreshCuentas} />}
+      <TablaPartidas partidas={partidas} setPartidas={setPartidas} editable={editable} project={pres.project} />
 
       <Card>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -363,7 +518,7 @@ function Editor({ pres, usuario, puedeEditarProyecto, cuentas, onRefreshCuentas,
   );
 }
 
-export function Presupuestos({ usuario, cuentas = [], onRefreshCuentas }) {
+export function Presupuestos({ usuario, cuentas = [], reports = [], onRefreshCuentas }) {
   const [lista, setLista] = useState(null);
   const [proyecto, setProyecto] = useState(null);
   const [abierto, setAbierto] = useState(null);
@@ -380,7 +535,7 @@ export function Presupuestos({ usuario, cuentas = [], onRefreshCuentas }) {
 
   if (!lista) return <div style={{ color: C.muted }}>Cargando...</div>;
   const pres = abierto && lista.find(p => p.id === abierto);
-  if (pres) return <Editor key={pres.id + pres.estado} pres={pres} usuario={usuario} puedeEditarProyecto={aCargo.includes(pres.project)} cuentas={cuentas} onRefreshCuentas={onRefreshCuentas} onVolver={() => setAbierto(null)} onCambio={(nuevo) => recargar(nuevo)} />;
+  if (pres) return <Editor key={pres.id + pres.estado} pres={pres} usuario={usuario} puedeEditarProyecto={aCargo.includes(pres.project)} cuentas={cuentas} reports={reports} onRefreshCuentas={onRefreshCuentas} onVolver={() => setAbierto(null)} onCambio={(nuevo) => recargar(nuevo)} />;
 
   const delProyecto = lista.filter(p => p.project === proyecto && (verReemplazados || p.estado !== "reemplazado"));
   const puedeCrear = aCargo.includes(proyecto);

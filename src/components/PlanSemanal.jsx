@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, INP, BTN_SM, ACTIVIDADES_CATALOGO, UNIDADES, ETAPAS } from "../lib/constants.js";
-import { loadPlanesSemanales, guardarPlanSemanal, loadObligacionesInformes } from "../lib/api.js";
+import { loadPlanesSemanales, guardarPlanSemanal, loadObligacionesInformes, loadPartidasVigentes } from "../lib/api.js";
 import { Card, SectionTitle } from "./ui.jsx";
 import { actividadesRecientes, cotejarPlan, revisarPlan, estadoEntrega, hoyColombia, lunesDeFecha, sumarDias, esFestivo } from "../../supabase/functions/_shared/plan-semanal.js";
 
@@ -190,6 +190,8 @@ export function PlanSemanal({ reports, usuario }) {
   const [obligaciones, setObligaciones] = useState([]);
   const [proyecto, setProyecto] = useState(null);
   const [reabierto, setReabierto] = useState(false);
+  // Actividades del presupuesto vigente del proyecto, para planear contra ellas.
+  const [delPresupuesto, setDelPresupuesto] = useState([]);
   const [aviso, setAviso] = useState(null);
 
   const recargar = () => loadPlanesSemanales().then(setPlanes);
@@ -203,6 +205,7 @@ export function PlanSemanal({ reports, usuario }) {
 
   useEffect(() => { if (!proyecto && proyectos.length === 1) setProyecto(proyectos[0]); }, [proyectos, proyecto]);
   useEffect(() => { setReabierto(false); }, [proyecto, semana]);
+  useEffect(() => { if (proyecto) loadPartidasVigentes(proyecto).then(ops => setDelPresupuesto(ops.map(o => o.nombre))); }, [proyecto]);
 
   const buscar = (p, s) => (planes || []).find(x => x.project === p && String(x.semana).slice(0, 10) === s) || null;
   const mostrarAviso = (t) => { setAviso(t); setTimeout(() => setAviso(null), 6000); };
@@ -277,7 +280,7 @@ export function PlanSemanal({ reports, usuario }) {
       {proyecto && (
         <>
           {(!enviado || reabierto) && puedeEscribir && !(semana < lunesDeFecha(hoy) && !plan)
-            ? <Editor key={`${proyecto}-${semana}-${plan?.updated_at || ""}`} plan={plan} project={proyecto} semana={semana} usuario={usuario} sugerencias={actividadesRecientes(reports, proyecto, hoy)} onGuardado={(t) => { recargar(); mostrarAviso(t); }} />
+            ? <Editor key={`${proyecto}-${semana}-${plan?.updated_at || ""}`} plan={plan} project={proyecto} semana={semana} usuario={usuario} sugerencias={[...new Set([...delPresupuesto, ...actividadesRecientes(reports, proyecto, hoy)])]} onGuardado={(t) => { recargar(); mostrarAviso(t); }} />
             : !plan && <Card style={{ marginBottom: 16 }}><div style={{ color: C.muted, fontSize: 13 }}>{proyecto}: no se envió plan esa semana.</div></Card>}
           {enviado && cotejo && !esFutura && <Cotejo plan={plan} cotejo={cotejo} puedeEscribir={puedeEscribir} onMotivo={guardarMotivo} />}
           {revision && <Revision key={plan.updated_at} plan={plan} revision={revision} usuario={usuario} onVeredicto={guardarVeredicto} />}

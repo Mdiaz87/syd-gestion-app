@@ -4,10 +4,11 @@ import { C, SEM_COLOR, PROJECTS, PROYECTOS_SIN_OBRA, FRENTES_MASTER, FRENTES_POR
 import { fmt, semaforo } from "../lib/helpers.js";
 import { calcularRecordatorios, lunesDe, etiquetaSemana } from "../lib/recordatorios.js";
 import { loadObligacionesInformes, loadPlanesSemanales } from "../lib/api.js";
+import { ResumenPresupuestos } from "./ResumenPresupuestos.jsx";
 import { alertasPlanes, hoyColombia } from "../../supabase/functions/_shared/plan-semanal.js";
 import { Badge, Bar } from "./ui.jsx";
 
-export function Dashboard({reports,presupuestos,usuario}){
+export function Dashboard({reports,presupuestos,usuario,cuentas}){
   // Un usuario con proyecto_asignado (ej. cuenta externa limitada a un solo
   // proyecto) solo ve ese proyecto en todo el Dashboard, en vez de los 12 —
   // la protección real ya la da RLS (reports/presupuestos ya llegan filtrados),
@@ -145,6 +146,8 @@ export function Dashboard({reports,presupuestos,usuario}){
       {sinObraVisibles.length>0&&(
         <div style={{color:C.muted,fontSize:12,marginBottom:16}}>{sinObraVisibles.join(" y ")}: vendidos con SYD Universal. Solo comisiones, sin compromiso de informes ni alertas.</div>
       )}
+
+      <ResumenPresupuestos proyectos={usuario?.proyectoAsignado||null} reports={reports} cuentas={cuentas}/>
 
       {planesAlerta.length>0&&(
         <div style={{background:C.danger+"0c",border:`1px solid ${C.danger}44`,borderRadius:12,padding:16,marginBottom:24}}>
