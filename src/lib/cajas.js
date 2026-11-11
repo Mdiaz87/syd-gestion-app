@@ -15,6 +15,7 @@ async function llamar(accion, datos = {}) {
 export const cargarMiCaja = () => llamar("mi_caja");
 export const guardarGasto = (gasto) => llamar("guardar_gasto", { gasto });
 export const enviarGasto = (gastoId) => llamar("enviar_gasto", { gastoId });
+export const retirarGasto = (gastoId) => llamar("retirar_gasto", { gastoId });
 export const anularGasto = (gastoId, motivo) => llamar("anular_gasto", { gastoId, motivo });
 export const confirmarRecibido = (movimientoId) => llamar("confirmar_recibido", { movimientoId });
 // Directivo: manda la lista de ingenieros a Gestión para escoger responsables.

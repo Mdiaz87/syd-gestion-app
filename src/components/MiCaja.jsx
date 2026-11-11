@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
-import { cargarMiCaja, guardarGasto, enviarGasto, anularGasto, confirmarRecibido, subirSoporteGasto } from "../lib/cajas.js";
+import { cargarMiCaja, guardarGasto, enviarGasto, anularGasto, retirarGasto, confirmarRecibido, subirSoporteGasto } from "../lib/cajas.js";
 
 const pesos = (n) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(+n || 0);
 const fechaDia = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("es-CO") : "—");
@@ -180,8 +180,10 @@ function FormGasto({ caja, gasto, onListo, onCancelar }) {
   );
 }
 
-function FilaGasto({ g, onAbrir, onAnular }) {
+function FilaGasto({ g, onAbrir, onAnular, onRetirar }) {
   const [anulando, setAnulando] = useState(false);
+  const [retirando, setRetirando] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState("");
   const editable = g.estado === "borrador" || g.estado === "devuelto";
@@ -202,6 +204,23 @@ function FilaGasto({ g, onAbrir, onAnular }) {
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid }} onClick={() => onAbrir(g)}>{g.estado === "devuelto" ? "Corregir" : "Completar y enviar"}</button>
           {g.estado === "borrador" && <button style={BTN_SM} onClick={() => setAnulando(!anulando)}>{anulando ? "Cancelar" : "Anular"}</button>}
+        </div>
+      )}
+      {g.estado === "enviado" && onRetirar && !retirando && (
+        <div style={{ marginTop: 8 }}>
+          <button style={BTN_SM} onClick={() => { setError(""); setRetirando(true); }}>Retirar para corregir</button>
+        </div>
+      )}
+      {retirando && (
+        <div style={{ background: C.warn + "14", borderRadius: 10, padding: 10, marginTop: 8, fontSize: 13, color: C.text }}>
+          El gasto sale de la revisión de Contabilidad y vuelve a tus borradores para que lo corrijas y lo envíes otra vez.
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button style={{ ...BTN_SM, color: C.blueMid, borderColor: C.blueMid, opacity: ocupado ? 0.6 : 1 }} disabled={ocupado} onClick={async () => {
+              setOcupado(true);
+              try { await onRetirar(g); } catch (err) { setError(err.message); setRetirando(false); } finally { setOcupado(false); }
+            }}>Sí, retirarlo</button>
+            <button style={BTN_SM} disabled={ocupado} onClick={() => setRetirando(false)}>Cancelar</button>
+          </div>
         </div>
       )}
       {anulando && (
@@ -332,7 +351,10 @@ export function MiCaja() {
       <Card style={{ marginBottom: 14 }}>
         <SectionTitle>Gastos</SectionTitle>
         {resto.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>Todavía no hay gastos enviados.</div>
-          : resto.map((g) => <FilaGasto key={g.id} g={g} onAbrir={setFormGasto} />)}
+          : resto.map((g) => (
+            <FilaGasto key={g.id} g={g} onAbrir={setFormGasto}
+              onRetirar={async (gasto) => { await retirarGasto(gasto.id); setAviso("Gasto retirado de revisión. Está en tus borradores: corrígelo y envíalo otra vez."); await cargar(); }} />
+          ))}
       </Card>
       {caja.movimientos.length > 0 && (
         <Card>

@@ -22,7 +22,7 @@ const corsHeaders = {
 };
 const responder = (cuerpo: unknown, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: corsHeaders });
 
-const ACCIONES_INGENIERO = ["mi_caja", "guardar_gasto", "enviar_gasto", "anular_gasto", "confirmar_recibido"];
+const ACCIONES_INGENIERO = ["mi_caja", "guardar_gasto", "enviar_gasto", "retirar_gasto", "anular_gasto", "confirmar_recibido"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
