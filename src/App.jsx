@@ -18,6 +18,8 @@ import { CuentasCobro } from "./components/CuentasCobro.jsx";
 import { PlanSemanal } from "./components/PlanSemanal.jsx";
 import { Presupuestos } from "./components/Presupuestos.jsx";
 import { MiCaja } from "./components/MiCaja.jsx";
+import { Mensajes } from "./components/Mensajes.jsx";
+import { apiMensajes } from "./lib/mensajes.js";
 import { sincronizarIngenieros } from "./lib/cajas.js";
 
 // ── APP ───────────────────────────────────────────────────────────────────────
@@ -27,6 +29,14 @@ export default function App(){
   const [tab,setTab]=useState("dashboard");
   const [directivoForm,setDirectivoForm]=useState("coord");
   const [reports,setReports]=useState([]);
+  const [noLeidos,setNoLeidos]=useState(0);
+  useEffect(()=>{
+    if(!usuario) return;
+    const contar=()=>apiMensajes.noLeidos().then(n=>setNoLeidos(Number(n)||0)).catch(()=>{});
+    contar();
+    const t=setInterval(contar,60000);
+    return ()=>clearInterval(t);
+  },[usuario?.id]);
   const [selected,setSelected]=useState(null);
   const [editingReport,setEditingReport]=useState(null);
   const [deletingReport,setDeletingReport]=useState(null);
@@ -195,11 +205,13 @@ export default function App(){
   const proyectosVisibles = usuario.proyectoAsignado || PROJECTS;
   const muestraCoord = usuario.rol==="Coordinador" || (ingCoord&&directivoForm==="coord");
   const muestraIng = usuario.rol==="Ingeniero" && (!ingCoord||directivoForm==="ing");
-  const tabs = usuario.rol==="Directivo"
+  // Mensajes internos (2026-11-10): para todos, con los no leídos en la pestaña.
+  const tabMensajes = {id:"mensajes",label:noLeidos>0?`💬 Mensajes (${noLeidos})`:"💬 Mensajes"};
+  const tabs = [...(usuario.rol==="Directivo"
     ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
     ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
-    : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}];
+    : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}]), tabMensajes];
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,color:C.text}}>
@@ -361,6 +373,7 @@ export default function App(){
           <CuentasCobro cuentas={cuentasCobro} usuario={usuario} onRefresh={async()=>setCuentasCobro(await loadCuentasCobro())}/>
         )}
         {tab==="caja"&&usuario.rol==="Ingeniero"&&<MiCaja/>}
+        {tab==="mensajes"&&<Mensajes api={apiMensajes} alCambiarNoLeidos={setNoLeidos}/>}
         {tab==="equipo"&&usuario.rol==="Directivo"&&!usuario.proyectoAsignado&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
           <div>
