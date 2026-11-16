@@ -1,13 +1,9 @@
-import { supabase, createScratchClient } from "../supabase.js";
+import { supabase } from "../supabase.js";
 import { enviarAlertaPresupuesto, enviarNotificacionPago, subirSoporteCuentaCobro } from "./pdf.js";
 
-// Dominio real de la empresa: Supabase Auth exige un dominio con DNS válido,
-// no acepta dominios inventados. Las direcciones son sintéticas (no reciben
-// correo real), solo sirven como usuario para el login.
-const EMAIL_DOMAIN = "sydinversiones.com";
-const emailFor = (key) => `syd-user-${key}@${EMAIL_DOMAIN}`;
+// Formato viejo de contraseña: solo para el login de respaldo (cuentas que aún
+// no han entrado con el login por servidor, o si este falla).
 const passwordFor = (key, pin) => `syd-${key}-${pin}`;
-const genPin = () => String(Math.floor(1000 + Math.random() * 9000));
 
 // ── INFORMES ──────────────────────────────────────────────────────────────────
 export async function loadReports(){
@@ -72,20 +68,32 @@ export function shapeUsuario(profile){
 // Login por servidor (Edge Function iniciar-sesion): bloqueo real de
 // intentos y contraseña no derivable desde el navegador. En prueba: solo con
 // ?login=v2 en la URL; el resto sigue con el login de siempre.
-const LOGIN_V2 = typeof window!=="undefined" && new URLSearchParams(window.location.search).get('login')==='v2';
+// Devuelve { usuario } | { bloqueado, segundosRestantes } | { fallo: true } (PIN
+// incorrecto) | { error } (el servidor no respondió bien: se usa el login viejo).
 async function loginServidor(profile, pin){
   const { data, error } = await supabase.functions.invoke('iniciar-sesion', { body: { profileId: profile.id, pin } });
-  if(error || !data){ console.error('Error en iniciar-sesion:', error); return null; }
+  if(error || !data){ console.error('Error en iniciar-sesion:', error); return { error: true }; }
   if(data.bloqueado) return { bloqueado: true, segundosRestantes: data.segundosRestantes };
-  if(!data.ok || !data.tokenHash) return null;
+  if(data.error) return { error: true };
+  if(!data.ok || !data.tokenHash) return { fallo: true };
   let r = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' });
   if(r.error) r = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'email' });
-  if(r.error){ console.error('Error canjeando la sesión:', r.error); return null; }
-  return shapeUsuario(profile);
+  if(r.error){ console.error('Error canjeando la sesión:', r.error); return { error: true }; }
+  return { usuario: shapeUsuario(profile) };
 }
 
+// Login por servidor (bloqueo real de intentos y contraseña con secreto del
+// servidor; la primera vez pasa la contraseña vieja al formato nuevo). Si el
+// servidor falla (no por PIN incorrecto), se usa el login de siempre como
+// respaldo, para que nadie quede por fuera; sirve para quien aún no ha migrado.
 export async function login(profile, pin){
-  if(LOGIN_V2) return loginServidor(profile, pin);
+  const r = await loginServidor(profile, pin);
+  if(r.usuario) return r.usuario;
+  if(r.bloqueado) return r;
+  if(r.fallo) return null;
+  return loginAnterior(profile, pin);
+}
+async function loginAnterior(profile, pin){
   const { data: chk } = await supabase.rpc('intentos_restantes', { p_profile_id: profile.id });
   if(chk?.bloqueado){
     return { bloqueado: true, segundosRestantes: chk.segundos_restantes };
@@ -109,29 +117,19 @@ export async function resetearPinDeOtro(targetId){
   if(error){ console.error('Error reseteando código:', error); return null; }
   return data?.pin || null;
 }
+// El PIN nuevo lo procesa el servidor (Edge Function cambiar-pin): la
+// contraseña ya no se arma en el navegador.
 export async function cambiarMiPin(nuevoPin){
-  const { data: { user } } = await supabase.auth.getUser();
-  if(!user) return false;
-  const { data: profile, error: profileError } = await supabase.from('profiles').select('id,legacy_id').eq('id', user.id).single();
-  if(profileError || !profile) { console.error('Error leyendo perfil propio:', profileError); return false; }
-  const key = profile.legacy_id || profile.id;
-  const { error } = await supabase.auth.updateUser({ password: passwordFor(key, nuevoPin) });
-  if(error){ console.error('Error cambiando código:', error); return false; }
+  const { data, error } = await supabase.functions.invoke('cambiar-pin', { body: { pin: nuevoPin } });
+  if(error || !data?.ok){ console.error('Error cambiando código:', error || data?.error); return false; }
   return true;
 }
+// Crear personas lo hace el servidor (Edge Function crear-usuario), solo para
+// Directivos sin restricción de proyecto. Ya no se usa el registro abierto.
 export async function crearUsuario(nombre, rol){
-  const scratch = createScratchClient();
-  const pin = genPin();
-  const key = crypto.randomUUID();
-  const email = emailFor(key);
-  const { data: signUpData, error: signUpError } = await scratch.auth.signUp({
-    email, password: passwordFor(key, pin),
-  });
-  if(signUpError || !signUpData.user){ console.error('Error creando usuario:', signUpError); return null; }
-  const id = signUpData.user.id;
-  const { error: profileError } = await scratch.from('profiles').insert({ id, nombre, rol, activo:true, email, legacy_id:key });
-  if(profileError){ console.error('Error creando perfil:', profileError); return null; }
-  return { id, nombre, rol, pin };
+  const { data, error } = await supabase.functions.invoke('crear-usuario', { body: { nombre, rol } });
+  if(error || !data?.ok){ console.error('Error creando usuario:', error || data?.error); return null; }
+  return { id: data.id, nombre: data.nombre, rol: data.rol, pin: data.pin };
 }
 export async function editarUsuario(id, nombre, rol, extra={}){
   const { error } = await supabase.from('profiles').update({ nombre, rol, ...extra }).eq('id', id);
