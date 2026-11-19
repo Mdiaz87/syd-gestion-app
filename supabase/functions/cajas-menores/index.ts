@@ -22,7 +22,10 @@ const corsHeaders = {
 };
 const responder = (cuerpo: unknown, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: corsHeaders });
 
-const ACCIONES_INGENIERO = ["mi_caja", "guardar_gasto", "enviar_gasto", "retirar_gasto", "anular_gasto", "confirmar_recibido"];
+const ACCIONES_INGENIERO = ["mi_caja", "guardar_gasto", "enviar_gasto", "retirar_gasto", "anular_gasto", "confirmar_recibido",
+  // Novedades de nómina del personal de obra (Miguel, 2026-11-19).
+  "nomina_novedades", "nomina_guardar_novedades"];
+const ACCIONES_NOMINA = ["nomina_novedades", "nomina_guardar_novedades"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -52,12 +55,24 @@ Deno.serve(async (req) => {
 
     const cuerpo: Record<string, unknown> = { accion, datos: datos ?? {} };
     if (esIngeniero) {
-      cuerpo.ingeniero = {
-        id: perfil.id,
-        nombre: perfil.nombre,
-        rol: perfil.rol,
-        proyectos: Array.isArray(perfil.proyecto_asignado) ? perfil.proyecto_asignado : null,
-      };
+      const proyectos: string[] | null = Array.isArray(perfil.proyecto_asignado) ? perfil.proyecto_asignado : null;
+      cuerpo.ingeniero = { id: perfil.id, nombre: perfil.nombre, rol: perfil.rol, proyectos };
+      // Nómina: un ingeniero sin proyectos fijos reporta el personal de los
+      // proyectos donde es el responsable de los informes (Equipo →
+      // obligaciones_informes). Si no tiene ninguno, lista vacía: no ve a nadie.
+      // Va aparte para no cambiar los proyectos que usa "Mi caja".
+      if (ACCIONES_NOMINA.includes(accion)) {
+        let deNomina = proyectos;
+        if (!deNomina) {
+          const { data: obligs } = await supabaseServicio
+            .from("obligaciones_informes")
+            .select("project, ing_responsable, coord_responsable");
+          deNomina = (obligs ?? [])
+            .filter((o: { ing_responsable: string | null; coord_responsable: string | null }) => o.ing_responsable === perfil.id || o.coord_responsable === perfil.id)
+            .map((o: { project: string }) => o.project);
+        }
+        cuerpo.proyectosNomina = deNomina;
+      }
     }
     // La lista completa va al abrir "Mi caja" y al sincronizar (no en cada guardado).
     if (accion === "mi_caja" || accion === "sincronizar") {

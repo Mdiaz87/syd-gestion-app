@@ -18,6 +18,7 @@ import { CuentasCobro } from "./components/CuentasCobro.jsx";
 import { PlanSemanal } from "./components/PlanSemanal.jsx";
 import { Presupuestos } from "./components/Presupuestos.jsx";
 import { MiCaja } from "./components/MiCaja.jsx";
+import { NovedadesNomina } from "./components/NovedadesNomina.jsx";
 import { Mensajes } from "./components/Mensajes.jsx";
 import { apiMensajes } from "./lib/mensajes.js";
 import { ActualizarDatos } from "./components/ActualizarDatos.jsx";
@@ -224,7 +225,7 @@ export default function App(){
   const tabs = [...(usuario.rol==="Directivo"
     ? [{id:"dashboard",label:"📊 Dashboard"},{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"destinatarios",label:"📧 Destinatarios"},...(usuario.proyectoAsignado?[]:[{id:"equipo",label:"👥 Equipo"}])]
     : usuario.rol==="Ingeniero"
-    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"}]
+    ? [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"plan",label:"🗓️ Plan semanal"},{id:"presupuestos",label:"📐 Presupuestos"},{id:"informes",label:"📁 Ver Informes"},{id:"consultas",label:"🔍 Consultas"},{id:"pagos",label:"💳 Pagos"},{id:"caja",label:"💵 Mi caja"},{id:"nomina",label:"👷 Novedades de nómina"}]
     : [{id:"nuevo",label:"📝 Nuevo Informe"},{id:"informes",label:"📁 Ver Informes"}]), tabMensajes];
 
   return (
@@ -387,6 +388,7 @@ export default function App(){
           <CuentasCobro cuentas={cuentasCobro} usuario={usuario} onRefresh={async()=>setCuentasCobro(await loadCuentasCobro())}/>
         )}
         {tab==="caja"&&usuario.rol==="Ingeniero"&&<MiCaja/>}
+        {tab==="nomina"&&usuario.rol==="Ingeniero"&&<NovedadesNomina/>}
         {tab==="mensajes"&&<Mensajes api={apiMensajes} alCambiarNoLeidos={setNoLeidos}/>}
         {tab==="equipo"&&usuario.rol==="Directivo"&&!usuario.proyectoAsignado&&<PanelAdmin usuarios={usuarios} onUsuariosChange={setUsuarios} usuario={usuario}/>}
         {tab==="destinatarios"&&usuario.rol==="Directivo"&&(
