@@ -20,6 +20,7 @@ import { Presupuestos } from "./components/Presupuestos.jsx";
 import { MiCaja } from "./components/MiCaja.jsx";
 import { Mensajes } from "./components/Mensajes.jsx";
 import { apiMensajes } from "./lib/mensajes.js";
+import { ActualizarDatos } from "./components/ActualizarDatos.jsx";
 import { sincronizarIngenieros } from "./lib/cajas.js";
 
 // ── APP ───────────────────────────────────────────────────────────────────────
@@ -30,6 +31,12 @@ export default function App(){
   const [directivoForm,setDirectivoForm]=useState("coord");
   const [reports,setReports]=useState([]);
   const [noLeidos,setNoLeidos]=useState(0);
+  // Datos de contacto (2026-11-18): undefined = revisando, null = completos, objeto = falta algo.
+  const [datosContacto,setDatosContacto]=useState(undefined);
+  const revisarDatosContacto=()=>apiMensajes.datosPendientes()
+    .then(d=>setDatosContacto(d&&(d.falta_telefono||d.falta_email)?d:null))
+    .catch(()=>setDatosContacto(null));
+  useEffect(()=>{ setDatosContacto(undefined); if(usuario) revisarDatosContacto(); },[usuario?.id]);
   useEffect(()=>{
     if(!usuario) return;
     const contar=()=>apiMensajes.noLeidos().then(n=>setNoLeidos(Number(n)||0)).catch(()=>{});
@@ -197,6 +204,13 @@ export default function App(){
       setTab(u.rol==="Directivo"?"dashboard":"nuevo");
       cargarTodo();
     }}/>
+  );
+
+  // Si le falta el celular o un correo real, no puede usar la app hasta actualizarlos.
+  if(datosContacto===undefined) return <div style={{minHeight:"100vh",background:C.bg}}/>;
+  if(datosContacto) return (
+    <ActualizarDatos usuario={usuario} datos={datosContacto} onListo={revisarDatosContacto}
+      onSalir={async()=>{await supabase.auth.signOut();setUsuario(null);}}/>
   );
 
   // Un Directivo con proyecto_asignado (ej. cuenta de cliente/externo limitada

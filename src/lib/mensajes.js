@@ -16,6 +16,7 @@ export const apiMensajes = {
   enviar: (p) => llamar("enviar", p),
   directorio: () => llamar("directorio"),
   guardarMisDatos: (p) => llamar("guardar_mis_datos", p),
+  datosPendientes: () => llamar("datos_pendientes"),
   admin: () => llamar("admin"),
   adminGuardar: (p) => llamar("admin_guardar", p),
 };

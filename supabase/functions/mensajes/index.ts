@@ -11,7 +11,7 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 const responder = (cuerpo: unknown, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: corsHeaders });
-const ACCIONES = ["no_leidos", "bandeja", "abrir", "enviar", "directorio", "guardar_mis_datos", "admin", "admin_guardar"];
+const ACCIONES = ["no_leidos", "bandeja", "abrir", "enviar", "directorio", "guardar_mis_datos", "datos_pendientes", "admin", "admin_guardar"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
