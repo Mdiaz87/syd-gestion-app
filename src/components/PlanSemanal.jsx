@@ -92,7 +92,7 @@ function Editor({ plan, project, semana, usuario, sugerencias, onGuardado }) {
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11 }}>Unidad</label>
-                <select style={INP} value={f.unidad} onChange={e => set(f.id, "unidad", e.target.value)}>{UNIDADES.filter(u => u !== "Otro").map(u => <option key={u}>{u}</option>)}</select>
+                <select style={INP} value={f.unidad} onChange={e => set(f.id, "unidad", e.target.value)}>{[...UNIDADES.filter(u => u !== "Otro"), "GLB"].map(u => <option key={u}>{u}</option>)}</select>
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11 }}>Equipo / observación</label>
