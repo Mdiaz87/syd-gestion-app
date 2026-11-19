@@ -84,6 +84,50 @@ const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;
 const APP_URL = "https://sydinversionestecnica.netlify.app/";
 const lista = (items: string[]) => `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`;
 
+type Linea = { project: string; texto: string };
+const TIPO: Record<string, string> = { coord: "Informe semanal", ing: "Informe mensual", plan: "Plan semanal" };
+const mayus = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+const AZUL = "#0f2d61";
+const TH = "text-align:left;padding:6px 10px;font-size:12px;color:#5b6b85;font-weight:600;border-bottom:1px solid #dde3ee";
+const TD = "padding:7px 10px;font-size:13px;color:#1a2233;border-bottom:1px solid #eef1f6;vertical-align:top";
+
+// Resumen ordenado (Miguel, 2026-11-19: "que llegue más organizado"): arriba
+// el total y cuántos tiene cada responsable; después un bloque por proyecto
+// con sus pendientes (qué, detalle, responsable), lo que no se cumplió del
+// plan de la semana pasada y, solo para Directivos, las alertas de
+// presupuesto.
+function resumenHtml(pendientes: Pendiente[], plan: Linea[], presupuesto: Linea[], sinCorreo: Pendiente[], nombreDe: (id: string | null) => string, paraDirectivos: boolean) {
+  const proyectos = [...new Set([...pendientes.map(p => p.project), ...plan.map(l => l.project), ...presupuesto.map(l => l.project)])];
+  const cuenta = (proj: string) => pendientes.filter(p => p.project === proj).length;
+  proyectos.sort((a, b) => cuenta(b) - cuenta(a) || a.localeCompare(b, "es"));
+
+  const porResp = new Map<string, number>();
+  for (const p of pendientes) porResp.set(nombreDe(p.responsableId), (porResp.get(nombreDe(p.responsableId)) || 0) + 1);
+  const resp = [...porResp.entries()].sort((a, b) => b[1] - a[1]);
+
+  const bloques = proyectos.map(proj => {
+    const ps = pendientes.filter(p => p.project === proj);
+    const pl = plan.filter(l => l.project === proj);
+    const pr = presupuesto.filter(l => l.project === proj);
+    return `<div style="font-size:15px;font-weight:700;color:${AZUL};margin:20px 0 6px">${esc(proj)}${ps.length ? ` <span style="font-weight:400;color:#5b6b85">(${ps.length})</span>` : ""}</div>` +
+      (ps.length ? `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%;table-layout:fixed">` +
+        `<tr><th style="${TH};width:18%">Qué</th><th style="${TH};width:57%">Detalle</th><th style="${TH};width:25%">Responsable</th></tr>` +
+        ps.map(p => `<tr><td style="${TD}">${TIPO[p.tipo] || ""}</td><td style="${TD}">${esc(mayus(p.detalle))}</td>` +
+          `<td style="${TD}">${esc(nombreDe(p.responsableId))}${sinCorreo.includes(p) ? `<div style="font-size:11px;color:#c0392b">sin correo registrado</div>` : ""}</td></tr>`).join("") +
+        `</table>` : "") +
+      (pl.length ? `<div style="font-size:12.5px;margin:8px 0 0;padding:8px 10px;background:#fff7e6;border-radius:6px"><b>Plan de la semana pasada:</b> ${pl.map(l => esc(l.texto)).join("<br>")}</div>` : "") +
+      (pr.length ? `<div style="font-size:12.5px;margin:8px 0 0;padding:8px 10px;background:#f3f6fb;border-radius:6px"><b>Presupuesto:</b> ${pr.map(l => esc(l.texto)).join("<br>")}</div>` : "");
+  }).join("");
+
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:780px;color:#1a2233">` +
+    `<div style="font-size:18px;font-weight:700;color:${AZUL};margin-bottom:4px">Pendientes de informes y planes — SYD Técnica</div>` +
+    `<div style="font-size:14px;margin-bottom:12px">${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"} en ${proyectos.length} proyecto${proyectos.length === 1 ? "" : "s"}.</div>` +
+    (resp.length ? `<div style="font-size:13px;background:#f3f6fb;border-radius:8px;padding:10px 12px"><b>Por responsable:</b> ${resp.map(([n, c]) => `${esc(n)} (${c})`).join(" · ")}</div>` : "") +
+    bloques +
+    `<div style="font-size:13px;color:#5b6b85;margin-top:22px">Cárgalos en <a href="${APP_URL}">${APP_URL}</a>. Si ya lo hiciste, revisa que haya quedado como <b>Enviado</b> y no como borrador. ` +
+    (paraDirectivos ? `Puedes asignar responsables y correos en <b>Equipo</b>.` : `Este recordatorio se repite cada 2 días mientras haya pendientes.`) + `</div></div>`;
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.headers.get("x-cron-secret") !== Deno.env.get("RECORDATORIOS_CRON_SECRET")) {
@@ -103,7 +147,7 @@ Deno.serve(async (req) => {
     const pendientes = calcularPendientes(reports, (obligaciones || []) as Obligacion[]);
 
     // Plan semanal: si no se envió, o si la semana pasada no se completó y falta explicar por qué.
-    const lineasPlan: string[] = [];
+    const lineasPlan: Linea[] = [];
     for (const a of alertasPlanes(planes || [], reports, obligaciones || [], null, hoyColombia())) {
       if (a.entrega.estado === "vencido") {
         pendientes.push({ project: a.project, tipo: "plan", detalle: `plan semanal de actividades, semana ${etiquetaSemana(a.semana)}`, responsableId: a.responsableId });
@@ -120,13 +164,13 @@ Deno.serve(async (req) => {
         }
         // deno-lint-ignore no-explicit-any
         const detalle = faltas.map((f: any) => `${f.actividad}${f.pct != null ? ` (${f.pct}%)` : ""}${f.motivo ? `: ${f.motivo}` : ""}`).join("; ");
-        lineasPlan.push(`${a.project}, semana ${etiquetaSemana(a.anterior)}: ${pre.cumplidas} de ${pre.total} cumplidas. No se completó: ${detalle}.${pre.causas.length ? ` Registros: ${pre.causas.join(", ")}.` : ""}`);
+        lineasPlan.push({ project: a.project, texto: `Semana ${etiquetaSemana(a.anterior)}: ${pre.cumplidas} de ${pre.total} cumplidas. No se completó: ${detalle}.${pre.causas.length ? ` Registros: ${pre.causas.join(", ")}.` : ""}` });
       }
     }
 
     // Presupuestos vigentes: alertas para el resumen de Directivos y, lo que
     // le toca hacer al ingeniero (registrar avance, cargar cuentas), a él.
-    const lineasPresupuesto: string[] = [];
+    const lineasPresupuesto: Linea[] = [];
     const { data: vigentes } = await db.from("presupuestos").select("*").eq("estado", "vigente");
     if (vigentes?.length) {
       const projs = [...new Set(vigentes.map((v: { project: string }) => v.project))];
@@ -154,11 +198,11 @@ Deno.serve(async (req) => {
           const al = alertasPresupuesto(ctrl, (p: any) => `${cod[p.id]} ${p.nombre}`);
           atrasadas += al.filter((a: { tipo: string }) => a.tipo === "atraso").length;
           brechas += al.filter((a: { tipo: string }) => a.tipo === "brecha").length;
-          if (al.length) lineasPresupuesto.push(`${proj} · ${pres.nombre} (pagado ${ctrl.pctFinanciero.toFixed(1)}%, físico ${ctrl.pctFisico.toFixed(1)}%): ${al.map((a: { texto: string }) => a.texto).join("; ")}`);
+          if (al.length) lineasPresupuesto.push({ project: proj, texto: `${pres.nombre} (pagado ${ctrl.pctFinanciero.toFixed(1)}%, físico ${ctrl.pctFisico.toFixed(1)}%): ${al.map((a: { texto: string }) => a.texto).join("; ")}` });
         }
         // deno-lint-ignore no-explicit-any
         const sinActividad = deProyecto(cuentas, proj).filter((c: any) => c.estado === "aprobado_total" && !linajes.has(c.partida_linaje)).length;
-        if (sinActividad) lineasPresupuesto.push(`${proj}: ${sinActividad} cuenta${sinActividad === 1 ? "" : "s"} de cobro aprobada${sinActividad === 1 ? "" : "s"} sin actividad del presupuesto`);
+        if (sinActividad) lineasPresupuesto.push({ project: proj, texto: `${sinActividad} cuenta${sinActividad === 1 ? "" : "s"} de cobro aprobada${sinActividad === 1 ? "" : "s"} sin actividad del presupuesto` });
         // deno-lint-ignore no-explicit-any
         const resp = (obligaciones || []).find((o: any) => o.project === proj)?.ing_responsable || null;
         if (atrasadas || brechas) pendientes.push({ project: proj, tipo: "plan", detalle: `registrar en Presupuestos el avance físico: ${atrasadas ? `${atrasadas} actividad${atrasadas === 1 ? "" : "es"} pasada${atrasadas === 1 ? "" : "s"} de su fecha de fin` : ""}${atrasadas && brechas ? " y " : ""}${brechas ? `${brechas} con más pagado que construido` : ""}`, responsableId: resp });
@@ -169,35 +213,31 @@ Deno.serve(async (req) => {
     const perfil = new Map((perfiles || []).map((p: { id: string }) => [p.id, p]));
     const correoDe = new Map((contactos || []).map((c: { profile_id: string; email: string }) => [c.profile_id, c.email]));
 
-    // Un correo por responsable con todo lo suyo.
-    const porPersona = new Map<string, Pendiente[]>();
-    const sinCorreo: Pendiente[] = [];
-    for (const p of pendientes) {
-      const persona = p.responsableId ? perfil.get(p.responsableId) as { activo?: boolean } | undefined : undefined;
-      if (p.responsableId && persona?.activo && correoDe.get(p.responsableId)) {
-        porPersona.set(p.responsableId, [...(porPersona.get(p.responsableId) || []), p]);
-      } else sinCorreo.push(p);
-    }
-    const correos: { destinatarios: string[]; asunto: string; html: string }[] = [];
-    for (const [id, items] of porPersona) {
-      const nombre = String((perfil.get(id) as { nombre?: string })?.nombre || "").split(" ")[0];
-      correos.push({
-        destinatarios: [correoDe.get(id)!],
-        asunto: `SYD — Tienes ${items.length === 1 ? "un pendiente" : `${items.length} pendientes`} en la app`,
-        html: `<p>Hola ${esc(nombre)},</p><p>Según el Sistema de Gestión de Proyectos de SYD, tienes pendiente:</p>${lista(items.map(i => `${i.project}: ${i.detalle}`))}<p>Por favor cárgalo en <a href="${APP_URL}">${APP_URL}</a>. Si ya lo hiciste, revisa que haya quedado como <b>Enviado</b> y no como borrador.</p><p>Este recordatorio se repite cada 2 días mientras siga pendiente.</p>`,
-      });
-    }
+    // Correos (Miguel, 2026-11-19): el resumen completo, ordenado por
+    // proyecto, les llega también a los responsables de la parte técnica
+    // (los que tienen que actualizar cada informe o plan), no solo a los
+    // Directivos. Reemplaza el correo individual "Tienes N pendientes" para no
+    // mandarles dos correos cada 2 días. A los responsables no les llega la
+    // sección de presupuestos (porcentajes pagados), que es solo para
+    // Directivos.
+    const nombreDe = (id: string | null) => id ? String((perfil.get(id) as { nombre?: string })?.nombre || "sin nombre") : "Sin responsable";
+    const conCorreo = (id: string | null) => !!(id && (perfil.get(id) as { activo?: boolean } | undefined)?.activo && correoDe.get(id));
+    const sinCorreo = pendientes.filter(p => !conCorreo(p.responsableId));
+    const responsables = [...new Set(pendientes.filter(p => conCorreo(p.responsableId)).map(p => correoDe.get(p.responsableId!)!))];
+
     // Resumen para Directivos sin restricción de proyecto (los limitados a un
     // proyecto, ej. cuentas externas, no reciben el de toda la empresa).
-    const directivos = (perfiles || []).filter((p: { rol: string; activo: boolean; proyecto_asignado: string[] | null }) => p.rol === "Directivo" && p.activo && !p.proyecto_asignado?.length)
-      .map((p: { id: string; email_notificaciones?: string }) => correoDe.get(p.id) || p.email_notificaciones).filter(Boolean) as string[];
+    const directivos = [...new Set((perfiles || []).filter((p: { rol: string; activo: boolean; proyecto_asignado: string[] | null }) => p.rol === "Directivo" && p.activo && !p.proyecto_asignado?.length)
+      .map((p: { id: string; email_notificaciones?: string }) => correoDe.get(p.id) || p.email_notificaciones).filter(Boolean) as string[])];
+
+    const correos: { destinatarios: string[]; asunto: string; html: string }[] = [];
+    const asunto = `SYD Técnica — ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"} de informes y planes`;
+    if (pendientes.length || lineasPlan.length) {
+      const equipo = responsables.filter(c => !directivos.includes(c));
+      if (equipo.length) correos.push({ destinatarios: equipo, asunto, html: resumenHtml(pendientes, lineasPlan, [], sinCorreo, nombreDe, false) });
+    }
     if ((pendientes.length || lineasPlan.length || lineasPresupuesto.length) && directivos.length) {
-      const nombreDe = (p: Pendiente) => p.responsableId ? String((perfil.get(p.responsableId) as { nombre?: string })?.nombre || "sin nombre") : "sin responsable";
-      correos.push({
-        destinatarios: [...new Set(directivos)],
-        asunto: `SYD — ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"} de informes y planes`,
-        html: `<p>Pendientes a la fecha:</p>${lista(pendientes.map(p => `${p.project}: ${p.detalle} — ${nombreDe(p)}${sinCorreo.includes(p) ? " (no se le pudo avisar: sin correo registrado)" : ""}`))}<p>Los responsables con correo registrado ya recibieron su recordatorio. Puedes asignar responsables y correos en <b>Equipo</b>.</p>${lineasPlan.length ? `<p><b>Plan semanal vs. lo registrado por los coordinadores:</b></p>${lista(lineasPlan)}` : ""}${lineasPresupuesto.length ? `<p><b>Presupuestos de obra:</b></p>${lista(lineasPresupuesto)}` : ""}`,
-      });
+      correos.push({ destinatarios: directivos, asunto, html: resumenHtml(pendientes, lineasPlan, lineasPresupuesto, sinCorreo, nombreDe, true) });
     }
 
     if (dry) return new Response(JSON.stringify({ ok: true, dry: true, pendientes, correos: correos.map(c => ({ ...c, html: undefined, cuerpo: c.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() })) }, null, 2), { status: 200 });
