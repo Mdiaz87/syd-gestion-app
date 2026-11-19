@@ -16,6 +16,7 @@ const ESTADOS = {
   en_riesgo: { label: "En riesgo", color: C.warn },
   parcial: { label: "Parcial", color: C.warn },
   incumplida: { label: "No se hizo", color: C.danger },
+  otra_unidad: { label: "Hecha (otra unidad)", color: C.blueMid },
 };
 const ENTREGA = {
   enviado: { label: "Enviado", color: C.green },
@@ -35,14 +36,17 @@ function Editor({ plan, project, semana, usuario, sugerencias, onGuardado }) {
   const [filas, setFilas] = useState(plan?.actividades?.length ? plan.actividades : [nuevaFila()]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  const [intentoEnviar, setIntentoEnviar] = useState(false);
   const set = (id, k, v) => setFilas(fs => fs.map(f => f.id === id ? { ...f, [k]: v } : f));
+  const faltaMeta = (f) => String(f.actividad || "").trim() && !(+f.meta > 0);
 
   const guardar = async (estado) => {
     setError("");
     const limpias = filas.filter(f => String(f.actividad).trim());
     if (estado === "enviado") {
       if (!limpias.length) { setError("⚠️ Agrega al menos una actividad."); return; }
-      if (limpias.some(f => !(+f.meta > 0))) { setError("⚠️ Cada actividad necesita una meta (cantidad): sin ella no se puede medir si se cumplió."); return; }
+      const sinMeta = limpias.filter(f => !(+f.meta > 0));
+      if (sinMeta.length) { setIntentoEnviar(true); setError(`⚠️ No se envió: ${sinMeta.length} actividad${sinMeta.length === 1 ? "" : "es"} sin meta (marcadas en rojo). Pon la cantidad que se espera hacer en la semana; si es una tarea única, pon 1 und.`); return; }
     }
     setGuardando(true);
     const ok = await guardarPlanSemanal({
@@ -51,13 +55,18 @@ function Editor({ plan, project, semana, usuario, sugerencias, onGuardado }) {
     });
     setGuardando(false);
     if (!ok) { setError("⚠️ No se pudo guardar. Intenta de nuevo."); return; }
-    onGuardado(estado === "enviado" ? "✅ Plan enviado. Desde ahora se coteja con los registros de los coordinadores." : "📝 Borrador guardado.");
+    onGuardado(estado === "enviado" ? "✅ Plan enviado. Desde ahora se coteja con los registros de los coordinadores." : "📝 Guardado como BORRADOR: todavía no está enviado. Cuando todas las actividades tengan meta, toca \"Enviar plan\".");
   };
 
   return (
     <Card style={{ marginBottom: 16 }}>
       <SectionTitle>Actividades planeadas — {project}</SectionTitle>
-      <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Usa el mismo nombre de actividad que usan los coordinadores: así el cotejo es automático. Al enviarlo, el plan queda fijo.</div>
+      {plan?.estado === "borrador" && (
+        <div style={{ background: C.warn + "18", border: `1px solid ${C.warn}`, borderRadius: 8, padding: "8px 10px", fontSize: 13, marginBottom: 10, color: C.text }}>
+          📝 Este plan está guardado como <b>borrador: todavía no está enviado</b>. {filas.some(faltaMeta) ? `Faltan metas en ${filas.filter(faltaMeta).length} actividad(es), marcadas en rojo. ` : ""}Cuando esté completo, toca <b>Enviar plan</b>.
+        </div>
+      )}
+      <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Usa el mismo nombre de actividad <b>y la misma unidad</b> que usan los coordinadores (si ellos registran en horas, planea en horas): así el cotejo es automático. Al enviarlo, el plan queda fijo.</div>
       <datalist id="actividades-obra">{sugerencias.map(s => <option key={s} value={s} />)}</datalist>
       <div style={{ display: "grid", gap: 10 }}>
         {filas.map(f => {
@@ -79,7 +88,7 @@ function Editor({ plan, project, semana, usuario, sugerencias, onGuardado }) {
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11 }}>Meta</label>
-                <input style={INP} type="number" min="0" value={f.meta} onChange={e => set(f.id, "meta", e.target.value)} />
+                <input style={{ ...INP, ...(faltaMeta(f) && (intentoEnviar || plan?.estado === "borrador") ? { border: `1.5px solid ${C.danger}`, background: C.danger + "0c" } : {}) }} type="number" min="0" placeholder={faltaMeta(f) ? "Falta" : ""} value={f.meta} onChange={e => set(f.id, "meta", e.target.value)} />
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11 }}>Unidad</label>
@@ -122,7 +131,7 @@ function Cotejo({ plan, cotejo, puedeEscribir, onMotivo }) {
                 <tr key={f.id} style={{ borderBottom: `1px solid ${C.border}`, verticalAlign: "top" }}>
                   <td style={{ padding: 8, fontWeight: 600, color: C.text }}>{f.actividad}{f.etapa && f.etapa !== "General" ? <span style={{ color: C.muted, fontWeight: 400 }}> · {f.etapa}</span> : null}</td>
                   <td style={{ padding: 8, whiteSpace: "nowrap" }}>{f.meta != null ? `${f.meta} ${f.unidad}` : "—"}</td>
-                  <td style={{ padding: 8, whiteSpace: "nowrap" }}>{f.ejecutado != null ? `${Math.round(f.ejecutado * 10) / 10} ${f.unidad}` : f.otraUnidad ? "Otra unidad" : "—"}</td>
+                  <td style={{ padding: 8, whiteSpace: "nowrap" }}>{f.ejecutado != null ? `${Math.round(f.ejecutado * 10) / 10} ${f.unidad}` : f.otraUnidad ? `Registrada en ${f.unidadesRegistradas.join(" / ")}` : "—"}</td>
                   <td style={{ padding: 8 }}>{f.pct != null ? `${f.pct}%` : "—"}</td>
                   <td style={{ padding: 8 }}><Pill info={ESTADOS[f.estado]} /></td>
                   <td style={{ padding: 8 }}>{f.diasConRegistro}</td>

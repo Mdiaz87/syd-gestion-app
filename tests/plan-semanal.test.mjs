@@ -32,3 +32,11 @@ assert(r.avisos.some(x=>x.texto.includes("supera"))); assert(r.avisos.some(x=>x.
 const al=P.alertasPlanes([plan],reports,[{project:"X",plan_semanal:true},{project:"Citrino",plan_semanal:false}],null,"2026-11-12");
 assert.equal(al.length,1); assert.equal(al[0].entrega.estado,"enviado");
 console.log("OK todas");
+// Registrada en otra unidad: hecha, no medible, no es incumplimiento; la revisión avisa la unidad.
+{
+  const rep=[{role:"Coordinador",project:"V",days:[{date:"2026-11-10",activities:[{actividad:"Limpieza general",cantidad:5,unidad:"horas"}]},{date:"2026-11-03",activities:[{actividad:"Limpieza general",cantidad:5,unidad:"horas"}]}]}];
+  const pl={project:"V",semana:"2026-11-09",estado:"enviado",actividades:[{id:1,actividad:"Limpieza general",meta:1,unidad:"und"}]};
+  const c=P.cotejarPlan(pl,rep,"2026-11-19"); assert.equal(c.filas[0].estado,"otra_unidad"); assert.equal(c.incumplidas+c.parciales,0); assert.deepEqual(c.filas[0].unidadesRegistradas,["horas"]);
+  assert(P.revisarPlan(pl,rep,null,"2026-11-09").avisos.some(a=>a.texto.includes("registran en horas")));
+  console.log("OK otra unidad");
+}

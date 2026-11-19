@@ -102,12 +102,17 @@ export function cotejarPlan(plan, reports, hoy) {
     const ejecutado = mismaUnidad.reduce((s, r) => s + r.cantidad, 0);
     const pct = meta && mismaUnidad.length ? Math.round((ejecutado / meta) * 100) : null;
     let estado;
+    // Hubo registros pero en otra unidad (ej. planeada en "und", registrada en horas):
+    // se hizo, pero no se puede medir contra la meta. No cuenta como incumplimiento.
+    const otraUnidad = registros.length > 0 && !mismaUnidad.length && !!meta;
     if (!registros.length) estado = terminada ? "incumplida" : (avanceSemana >= 0.5 ? "en_riesgo" : "por_iniciar");
+    else if (otraUnidad) estado = "otra_unidad";
     else if (!meta) estado = "cumplida";
     else if (pct != null && pct >= 100) estado = "cumplida";
     else if (terminada) estado = "parcial";
     else estado = pct != null && pct / 100 < avanceSemana * 0.5 ? "en_riesgo" : "en_curso";
-    return { ...p, meta, ejecutado: mismaUnidad.length ? ejecutado : null, pct, estado, registros, diasConRegistro: new Set(registros.map(r => r.fecha)).size, otraUnidad: registros.length > 0 && !mismaUnidad.length && !!meta };
+    return { ...p, meta, ejecutado: mismaUnidad.length ? ejecutado : null, pct, estado, registros, diasConRegistro: new Set(registros.map(r => r.fecha)).size, otraUnidad,
+      unidadesRegistradas: [...new Set(registros.map(r => r.unidad).filter(Boolean))] };
   });
 
   const noPlaneadas = {};
@@ -133,7 +138,7 @@ export function cotejarPlan(plan, reports, hoy) {
   return {
     filas, terminada, avanceSemana, cumplidas, total: filas.length,
     pctCumplimiento: filas.length ? Math.round((cumplidas / filas.length) * 100) : null,
-    incumplidas: cuenta("incumplida"), parciales: cuenta("parcial"), enRiesgo: cuenta("en_riesgo"),
+    incumplidas: cuenta("incumplida"), parciales: cuenta("parcial"), enRiesgo: cuenta("en_riesgo"), otraUnidad: cuenta("otra_unidad"),
     noPlaneadas, diasSinRegistro, diasLluvia, novedades, causas,
   };
 }
@@ -149,11 +154,12 @@ export function revisarPlan(plan, reports, planAnterior, hoy) {
 
   const desde = sumarDias(semana, -56), hasta = sumarDias(semana, -1);
   const hist = diasCoordinador(reports, plan.project, desde, hasta);
-  const porSemana = {}; // nombre normalizado -> {nombre, semanas:{lunes:{unidad:total}}}
+  const porSemana = {}; // nombre normalizado -> {nombre, semanas:{lunes:{unidad:total}}, unidades:Set}
   hist.forEach(d => (d.activities || []).forEach(a => {
     const n = nombreReal(a); if (!n) return;
     const k = normalizar(n), lun = lunesDeFecha(d.date), u = normalizar(unidadReal(a));
-    porSemana[k] = porSemana[k] || { nombre: n, semanas: {} };
+    porSemana[k] = porSemana[k] || { nombre: n, semanas: {}, unidades: new Set() };
+    if (unidadReal(a)) porSemana[k].unidades.add(unidadReal(a));
     const s = porSemana[k].semanas[lun] = porSemana[k].semanas[lun] || {};
     if (a.cantidad !== "" && a.cantidad != null) s[u] = (s[u] || 0) + +a.cantidad;
   }));
@@ -166,6 +172,10 @@ export function revisarPlan(plan, reports, planAnterior, hoy) {
     if (p.meta === "" || p.meta == null || !(+p.meta > 0)) av("media", `"${p.actividad}" no tiene meta: no se podrá medir si se cumplió.`);
     const previas = Object.values(porSemana).filter(h => mismaActividad(h.nombre, p.actividad));
     if (!previas.length) { if (hist.length) av("info", `"${p.actividad}" no aparece en los registros de las últimas 8 semanas: es nueva en esta obra.`); continue; }
+    const unidadesCoord = [...new Set(previas.flatMap(h => [...h.unidades]))];
+    if (p.unidad && unidadesCoord.length && !unidadesCoord.some(u => normalizar(u) === normalizar(p.unidad))) {
+      av("media", `"${p.actividad}": los coordinadores la registran en ${unidadesCoord.join(" / ")}, no en ${p.unidad}. Planéala en ${unidadesCoord[0]} para poder medir si se cumplió.`);
+    }
     if (+p.meta > 0) {
       const u = normalizar(p.unidad);
       const totales = previas.flatMap(h => Object.values(h.semanas).map(s => s[u]).filter(v => v > 0));
