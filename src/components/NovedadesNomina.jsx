@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
 import { Card, SectionTitle } from "./ui.jsx";
 import { cargarNovedadesObra, guardarNovedadesObra, TIPOS_HORA } from "../lib/nominaObra.js";
+import { NOVEDADES_DIA, diasQuincena, diaSemana, esDominicalOFestivo, clasificarTurno, descansoSugerido, totalesPlanilla, HORAS_ORDINARIAS_DIA } from "../lib/planillaNomina.js";
 
-// Novedades de nómina (Miguel, 2026-11-19): el ingeniero reporta los días y
-// las horas extra de su personal de obra para cada quincena; Talento Humano
-// (Kelly) las pasa a la nómina en SYD Gestión. Kelly recibe novedades hasta
-// el 5 y el 20 de cada mes.
+// Novedades de nómina (Miguel, 2026-11-19): el ingeniero reporta las
+// novedades de su personal de obra para cada quincena; Talento Humano (Kelly)
+// las pasa a la nómina en SYD Gestión. Kelly recibe novedades hasta el 5 y el
+// 20 de cada mes. Desde el 2026-11-20 se llena como la planilla de Excel que
+// ya usaban (día por día: novedad, entrada y salida) y la app calcula los
+// días, las horas extra y los recargos (ver lib/planillaNomina.js).
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const etiquetaQuincena = (inicio) => {
   if (!inicio) return "";
@@ -19,19 +22,21 @@ const ESTADO = {
   enviada: { label: "Enviada a nómina", color: C.green },
   aplicada: { label: "Ya está en la nómina", color: C.blue },
 };
-const num = (v) => (v === "" || v == null ? "" : String(v));
 
-function filaDesde(t) {
+function filaDesde(t, inicio) {
   const n = t.novedad;
+  const previa = Object.fromEntries((Array.isArray(n?.planilla) ? n.planilla : []).map((d) => [d.fecha, d]));
   return {
     trabajador_id: t.id,
-    dias_trabajados: num(n ? n.dias_trabajados : 15),
-    dias_incapacidad: num(n ? n.dias_incapacidad : 0),
-    dias_vacaciones: num(n ? n.dias_vacaciones : 0),
-    horas: Object.fromEntries(TIPOS_HORA.map(([k]) => [k, num(n?.horas?.[k] ?? "")])),
+    planilla: diasQuincena(inicio).map((fecha) => {
+      const d = previa[fecha] || {};
+      return { fecha, novedad: d.novedad || "", entrada: d.entrada || "", salida: d.salida || "", descanso: d.descanso ?? "", nota: d.nota || "" };
+    }),
     nota: n?.nota || "",
   };
 }
+const ETQ_HORA = Object.fromEntries(TIPOS_HORA);
+const resumenHoras = (h) => Object.entries(h || {}).filter(([, v]) => v > 0).map(([k, v]) => `${v} h ${ETQ_HORA[k].toLowerCase()}`).join(" · ");
 
 export function NovedadesNomina() {
   const [datos, setDatos] = useState(null);
@@ -45,7 +50,7 @@ export function NovedadesNomina() {
   const aplicar = (d) => {
     setDatos(d);
     setQuincena(d.inicio);
-    setFilas(Object.fromEntries(d.trabajadores.map((t) => [t.id, filaDesde(t)])));
+    setFilas(Object.fromEntries(d.trabajadores.map((t) => [t.id, filaDesde(t, d.inicio)])));
   };
   const cargar = async (inicio) => {
     setError("");
@@ -59,14 +64,39 @@ export function NovedadesNomina() {
   const editable = (t) => !t.cerrada && t.novedad?.estado !== "aplicada";
   const editables = datos.trabajadores.filter(editable);
   const cambiar = (id, campo, valor) => setFilas((f) => ({ ...f, [id]: { ...f[id], [campo]: valor } }));
-  const cambiarHora = (id, k, valor) => setFilas((f) => ({ ...f, [id]: { ...f[id], horas: { ...f[id].horas, [k]: valor } } }));
-  const totalDias = (f) => (+f.dias_trabajados || 0) + (+f.dias_incapacidad || 0) + (+f.dias_vacaciones || 0);
-  const horasDe = (f) => TIPOS_HORA.reduce((s, [k]) => s + (+f.horas[k] || 0), 0);
+  const cambiarDia = (id, i, cambios) => setFilas((f) => {
+    const planilla = f[id].planilla.map((d, j) => {
+      if (j !== i) return d;
+      const nuevo = { ...d, ...cambios };
+      // Descanso sugerido mientras el ingeniero no lo haya escrito a mano.
+      if (("entrada" in cambios || "salida" in cambios) && (d.descanso === "" || d.descansoAuto)) {
+        nuevo.descanso = descansoSugerido(nuevo.entrada, nuevo.salida); nuevo.descansoAuto = true;
+      }
+      if ("descanso" in cambios) nuevo.descansoAuto = false;
+      return nuevo;
+    });
+    return { ...f, [id]: { ...f[id], planilla } };
+  });
+  // Llenar de una vez: el mismo horario en los días que estén sin novedad.
+  const llenarHorario = (id, entrada, salida, soloLaborales) => setFilas((f) => ({
+    ...f, [id]: { ...f[id], planilla: f[id].planilla.map((d) => (d.novedad === "" && (!soloLaborales || !esDominicalOFestivo(d.fecha))
+      ? { ...d, novedad: "trabajo", entrada, salida, descanso: descansoSugerido(entrada, salida), descansoAuto: true } : d)) },
+  }));
+  const totales = (f) => totalesPlanilla(f.planilla);
 
   const guardar = async (enviar) => {
-    const lista = editables.map((t) => filas[t.id]);
-    const malo = editables.find((t) => totalDias(filas[t.id]) > 15);
-    if (malo) { setError(`Los días de ${malo.nombre} pasan de 15.`); setAbierto(malo.id); return; }
+    const malo = editables.find((t) => totales(filas[t.id]).errores.length);
+    if (malo) { setError(`A ${malo.nombre} le falta la hora de entrada o de salida en algún día marcado "Trabajó".`); setAbierto(malo.id); return; }
+    const lista = editables.map((t) => {
+      const f = filas[t.id];
+      const tot = totales(f);
+      return {
+        trabajador_id: f.trabajador_id, dias_trabajados: tot.dias_trabajados, dias_incapacidad: tot.dias_incapacidad,
+        dias_vacaciones: tot.dias_vacaciones, horas: tot.horas, nota: f.nota,
+        planilla: f.planilla.filter((d) => d.novedad).map(({ fecha, novedad, entrada, salida, descanso, nota }) =>
+          ({ fecha, novedad, ...(novedad === "trabajo" ? { entrada, salida, descanso: +descanso || 0 } : {}), ...(nota ? { nota } : {}) })),
+      };
+    });
     setTrabajando(true); setError(""); setAviso("");
     try {
       aplicar(await guardarNovedadesObra(quincena, lista, enviar));
@@ -82,7 +112,7 @@ export function NovedadesNomina() {
       <Card style={{ marginBottom: 14 }}>
         <SectionTitle>Novedades de nómina del personal de obra</SectionTitle>
         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>
-          Reporta los días y las horas extra de tu personal en cada quincena. Talento Humano las recibe hasta el <b>5</b> y el <b>20</b> de cada mes y las pasa a la nómina.
+          Llena la planilla de cada trabajador como en el Excel: por cada día, la novedad y, si trabajó, la hora de entrada y de salida. Los días que dejes en "Día normal" se pagan normal. La app calcula los días, las horas extra y los recargos nocturnos y dominicales/festivos. Talento Humano las recibe hasta el <b>5</b> y el <b>20</b> de cada mes.
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
           {datos.quincenas.map((q) => (
@@ -107,7 +137,8 @@ export function NovedadesNomina() {
               const f = filas[t.id];
               const e = t.novedad ? ESTADO[t.novedad.estado] : null;
               const puede = editable(t);
-              const resumen = `${f.dias_trabajados || 0} días trabajados${+f.dias_incapacidad ? ` · ${f.dias_incapacidad} incapacidad` : ""}${+f.dias_vacaciones ? ` · ${f.dias_vacaciones} vacaciones` : ""}${horasDe(f) ? ` · ${horasDe(f)} h extra/recargos` : ""}`;
+              const tot = totales(f);
+              const resumen = `${tot.dias_trabajados} días pagados${tot.dias_incapacidad ? ` · ${tot.dias_incapacidad} incapacidad` : ""}${tot.dias_vacaciones ? ` · ${tot.dias_vacaciones} vacaciones` : ""}${tot.dias_no_pagados ? ` · ${tot.dias_no_pagados} sin pago` : ""}`;
               return (
                 <div key={t.id} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, cursor: "pointer" }} onClick={() => setAbierto(abierto === t.id ? null : t.id)}>
@@ -123,32 +154,9 @@ export function NovedadesNomina() {
                   </div>
                   {t.cerrada && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Esta quincena ya se envió a aprobación; para cambiarla avísale a Talento Humano.</div>}
                   {abierto === t.id && (
-                    <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-                        {[["dias_trabajados", "Días trabajados"], ["dias_incapacidad", "Incapacidad"], ["dias_vacaciones", "Vacaciones"]].map(([k, l]) => (
-                          <label key={k} style={{ fontSize: 12, color: C.muted }}>{l}
-                            <input type="number" min="0" max="15" step="0.5" inputMode="decimal" disabled={!puede} value={f[k]}
-                              onChange={(ev) => cambiar(t.id, k, ev.target.value)} style={{ ...INP, marginTop: 3 }} />
-                          </label>
-                        ))}
-                      </div>
-                      {totalDias(f) > 15 && <div style={{ color: C.danger, fontSize: 12 }}>Entre trabajados, incapacidad y vacaciones no pueden pasar de 15 días.</div>}
-                      <div style={{ fontSize: 12, color: C.muted }}>Ausencias o permisos no pagados: bájalos de los días trabajados y explícalo en la nota.</div>
-                      <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, marginBottom: 6 }}>Horas extra y recargos (número de horas)</div>
-                        {TIPOS_HORA.map(([k, l]) => (
-                          <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                            <span style={{ flex: 1, fontSize: 12.5, color: C.text }}>{l}</span>
-                            <input type="number" min="0" step="0.5" inputMode="decimal" disabled={!puede} value={f.horas[k]} placeholder="0"
-                              onChange={(ev) => cambiarHora(t.id, k, ev.target.value)} style={{ ...INP, width: 90 }} />
-                          </div>
-                        ))}
-                      </div>
-                      <label style={{ fontSize: 12, color: C.muted }}>Nota para Talento Humano (opcional)
-                        <input disabled={!puede} value={f.nota} onChange={(ev) => cambiar(t.id, "nota", ev.target.value)}
-                          placeholder="Ej. no vino el 20 (permiso no remunerado)" style={{ ...INP, marginTop: 3 }} />
-                      </label>
-                    </div>
+                    <PlanillaTrabajador f={f} tot={tot} puede={puede}
+                      onDia={(i2, c) => cambiarDia(t.id, i2, c)} onNota={(v) => cambiar(t.id, "nota", v)}
+                      onLlenar={(e2, s2, lab) => llenarHorario(t.id, e2, s2, lab)} />
                   )}
                 </div>
               );
@@ -166,6 +174,69 @@ export function NovedadesNomina() {
           <button disabled={trabajando} onClick={() => guardar(false)} style={{ ...BTN_SM, padding: "0 16px" }}>Guardar borrador</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function PlanillaTrabajador({ f, tot, puede, onDia, onNota, onLlenar }) {
+  const [entrada, setEntrada] = useState("07:00");
+  const [salida, setSalida] = useState("17:00");
+  const chico = { ...INP, padding: "6px 8px", fontSize: 13 };
+  return (
+    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+      {puede && (
+        <div style={{ background: C.blue + "0d", borderRadius: 10, padding: 10, fontSize: 12.5, color: C.text }}>
+          <div style={{ marginBottom: 6 }}>Llenar rápido los días que están en "Día normal" con este horario:</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="time" value={entrada} onChange={(e) => setEntrada(e.target.value)} style={{ ...chico, width: 110 }} />
+            <span>a</span>
+            <input type="time" value={salida} onChange={(e) => setSalida(e.target.value)} style={{ ...chico, width: 110 }} />
+            <button style={BTN_SM} onClick={() => onLlenar(entrada, salida, true)}>Lunes a sábado</button>
+            <button style={BTN_SM} onClick={() => onLlenar(entrada, salida, false)}>Todos los días</button>
+          </div>
+        </div>
+      )}
+      {f.planilla.map((d, i) => {
+        const fest = esDominicalOFestivo(d.fecha);
+        const c = d.novedad === "trabajo" ? clasificarTurno(d.fecha, d.entrada, d.salida, d.descanso) : null;
+        return (
+          <div key={d.fecha} style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ width: 62, fontSize: 12.5, color: fest ? C.danger : C.text, fontWeight: fest ? 600 : 400, flexShrink: 0 }}>
+                {diaSemana(d.fecha)} {Number(d.fecha.slice(8))}{fest && diaSemana(d.fecha) !== "Dom" ? " F" : ""}
+              </div>
+              <select disabled={!puede} value={d.novedad} onChange={(e) => onDia(i, { novedad: e.target.value })} style={{ ...chico, flex: 1, minWidth: 0 }}>
+                {NOVEDADES_DIA.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {d.novedad === "trabajo" && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", margin: "6px 0 0 70px", fontSize: 12, color: C.muted }}>
+                <input type="time" disabled={!puede} value={d.entrada} onChange={(e) => onDia(i, { entrada: e.target.value })} style={{ ...chico, width: 130 }} />
+                a
+                <input type="time" disabled={!puede} value={d.salida} onChange={(e) => onDia(i, { salida: e.target.value })} style={{ ...chico, width: 130 }} />
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>descanso
+                  <input type="number" min="0" max="4" step="0.5" inputMode="decimal" disabled={!puede} value={d.descanso}
+                    onChange={(e) => onDia(i, { descanso: e.target.value })} style={{ ...chico, width: 58 }} /> h
+                </label>
+                <div style={{ width: "100%", color: c ? C.muted : C.danger }}>
+                  {c ? `${c.total} h trabajadas${resumenHoras(c.horas) ? ` · ${resumenHoras(c.horas)}` : ""}` : "Falta la hora de entrada o de salida."}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div style={{ background: C.green + "12", borderRadius: 10, padding: 10, fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+        <b>Total de la quincena:</b> {tot.dias_trabajados} días pagados
+        {tot.dias_incapacidad ? ` · ${tot.dias_incapacidad} de incapacidad` : ""}{tot.dias_vacaciones ? ` · ${tot.dias_vacaciones} de vacaciones` : ""}
+        {tot.dias_no_pagados ? ` · ${tot.dias_no_pagados} sin pago (permiso no remunerado o ausencia)` : ""}
+        <div>{resumenHoras(tot.horas) || "Sin horas extra ni recargos."}</div>
+        <div style={{ fontSize: 11.5, color: C.muted }}>Nocturno: 7:00 p. m. a 6:00 a. m. · Extra: lo que pase de {HORAS_ORDINARIAS_DIA} h en el turno · "F" = festivo.</div>
+      </div>
+      <label style={{ fontSize: 12, color: C.muted }}>Nota para Talento Humano (opcional)
+        <input disabled={!puede} value={f.nota} onChange={(ev) => onNota(ev.target.value)}
+          placeholder="Ej. incapacidad del 3 al 5, adjunta en físico" style={{ ...INP, marginTop: 3 }} />
+      </label>
     </div>
   );
 }
