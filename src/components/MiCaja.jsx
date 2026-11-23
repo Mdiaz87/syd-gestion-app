@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, INP, BTN_SM } from "../lib/constants.js";
 import { Card, SectionTitle, CurrencyInput } from "./ui.jsx";
+import { imprimirLegalizacion } from "../lib/legalizacionCaja.js";
 import { cargarMiCaja, guardarGasto, enviarGasto, anularGasto, retirarGasto, confirmarRecibido, subirSoporteGasto } from "../lib/cajas.js";
 
 const pesos = (n) => new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(+n || 0);
@@ -238,6 +239,44 @@ function FilaGasto({ g, onAbrir, onAnular, onRetirar }) {
 }
 
 // "Mi caja": saldo, gastos y desembolsos de la caja menor del ingeniero.
+// Exportar la legalización (Kelly, 2026-11-19; en SYD Técnica desde el
+// 2026-11-23, pedido de Iván Pérez vía Miguel): los gastos enviados (en
+// revisión y aprobados) de un periodo, en una hoja para imprimir o guardar en
+// PDF y entregar con los soportes físicos.
+function ExportarLegalizacion({ caja }) {
+  const [abierto, setAbierto] = useState(false);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [incluir, setIncluir] = useState({ enviado: true, aprobado: true });
+  const [error, setError] = useState("");
+  const gastos = caja.gastos.filter((g) => incluir[g.estado] && (!desde || g.fecha >= desde) && (!hasta || g.fecha <= hasta));
+  const total = gastos.reduce((t, g) => t + (+g.valor || 0), 0);
+  if (!abierto) return <button style={{ ...BTN_SM, width: "100%", marginBottom: 14, padding: 10 }} onClick={() => setAbierto(true)}>Exportar legalización (PDF)</button>;
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <SectionTitle>Exportar legalización</SectionTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+        <Campo label="Desde"><input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={INP} /></Campo>
+        <Campo label="Hasta"><input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={INP} /></Campo>
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 13 }}>
+        <label><input type="checkbox" checked={incluir.enviado} onChange={(e) => setIncluir({ ...incluir, enviado: e.target.checked })} /> En revisión</label>
+        <label><input type="checkbox" checked={incluir.aprobado} onChange={(e) => setIncluir({ ...incluir, aprobado: e.target.checked })} /> Aprobados</label>
+      </div>
+      <div style={{ fontSize: 13, color: C.text, marginTop: 10 }}>{gastos.length} gasto{gastos.length === 1 ? "" : "s"} · <b>{pesos(total)}</b></div>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Se abre la hoja para imprimir; en "Destino" escoge "Guardar como PDF".</div>
+      {error && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button style={{ ...BTN_SM, background: C.blue, color: "#fff", border: "none", opacity: gastos.length ? 1 : 0.6 }} disabled={!gastos.length}
+          onClick={() => { setError(""); try { imprimirLegalizacion({ caja, gastos, desde, hasta }); } catch (err) { setError(err.message); } }}>
+          Exportar PDF
+        </button>
+        <button style={BTN_SM} onClick={() => setAbierto(false)}>Cerrar</button>
+      </div>
+    </Card>
+  );
+}
+
 export function MiCaja() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
@@ -332,6 +371,8 @@ export function MiCaja() {
       ) : (
         caja.estado === "abierta" && <button style={{ ...BTN_PRIMARIO, marginBottom: 14 }} onClick={() => { setAviso(""); setFormGasto("nuevo"); }}>+ Registrar gasto</button>
       )}
+
+      {!formGasto && resto.length > 0 && <ExportarLegalizacion caja={caja} />}
 
       {devueltos.length > 0 && (
         <Card borderColor={C.danger} style={{ marginBottom: 14 }}>
