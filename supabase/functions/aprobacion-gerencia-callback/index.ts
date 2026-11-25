@@ -43,12 +43,12 @@ async function enviarALegalizacion(supabase: any, cuenta: any) {
     });
     if (!resp.ok) {
       const texto = await resp.text();
-      await supabase.from("cuentas_cobro").update({ legalizacion_estado: "error", legalizacion_error: `HTTP ${resp.status}: ${texto.slice(0, 500)}` }).eq("id", cuenta.id);
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({ legalizacion_estado: "error", legalizacion_error: `HTTP ${resp.status}: ${texto.slice(0, 500)}` }).eq("id", cuenta.id); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuenta.id}: ${eUpd.message}`); }
       return;
     }
-    await supabase.from("cuentas_cobro").update({ legalizacion_estado: "enviado", legalizacion_error: null }).eq("id", cuenta.id);
+    { const { error: eUpd } = await supabase.from("cuentas_cobro").update({ legalizacion_estado: "enviado", legalizacion_error: null }).eq("id", cuenta.id); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuenta.id}: ${eUpd.message}`); }
   } catch (e) {
-    await supabase.from("cuentas_cobro").update({ legalizacion_estado: "error", legalizacion_error: String(e).slice(0, 500) }).eq("id", cuenta.id);
+    { const { error: eUpd } = await supabase.from("cuentas_cobro").update({ legalizacion_estado: "error", legalizacion_error: String(e).slice(0, 500) }).eq("id", cuenta.id); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuenta.id}: ${eUpd.message}`); }
   }
 }
 
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       // Colombia para que no se corra un día al mostrarla.
       const fecha = fechaPago ? `${fechaPago}T17:00:00.000Z` : ahora;
       const historialPago = [...(cuenta.historial || []), { accion: "Marcado como pagado", detalle: "Pago registrado por Tesorería en SYD Gestión", por: "Tesorería (SYD Gestión)", fecha }];
-      await supabase.from("cuentas_cobro").update({ pago_realizado: true, historial: historialPago }).eq("id", cuentaId);
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({ pago_realizado: true, historial: historialPago }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
@@ -102,29 +102,32 @@ Deno.serve(async (req) => {
     // de Gerencia en SYD Técnica (aprobacion_cxp_estado = 'enviado'). Una
     // decisión sobre una cuenta que aún no llegó así (ej. las enviadas antes
     // del cambio) solo se anota.
-    if (cuenta.estado !== "aprobado_contable" || cuenta.aprobacion_cxp_estado !== "enviado") {
+    // Si el envío quedó marcado "error" por un corte pero Gestión sí la recibió,
+    // la decisión igual vale (antes la cuenta quedaba trabada -- auditoría 25-nov).
+    if (cuenta.estado !== "aprobado_contable" || !["enviado", "error"].includes(cuenta.aprobacion_cxp_estado)) {
       // Aviso tardío o repetido: no cambia el estado, solo queda anotado.
-      await supabase.from("cuentas_cobro").update({ historial }).eq("id", cuentaId);
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({ historial }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
       return new Response(JSON.stringify({ ok: true, nota: `La cuenta estaba en ${cuenta.estado}; solo se anotó el aviso.` }), { status: 200 });
     }
 
     if (decision === "aprobado") {
-      await supabase.from("cuentas_cobro").update({
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({
         estado: "aprobado_total", condicion: null, motivo_rechazo: null,
         revisado_por: por, revisado_at: ahora, historial,
-      }).eq("id", cuentaId);
+      }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
       await enviarALegalizacion(supabase, { ...cuenta, estado: "aprobado_total" });
     } else if (decision === "devuelto") {
-      await supabase.from("cuentas_cobro").update({
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({
         estado: "devuelto", condicion: motivo || "Devuelto en Tesorería", revisado_por: por, revisado_at: ahora, historial,
-      }).eq("id", cuentaId);
+      }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
     } else {
-      await supabase.from("cuentas_cobro").update({
+      { const { error: eUpd } = await supabase.from("cuentas_cobro").update({
         estado: "rechazado", motivo_rechazo: motivo || "Rechazado en Tesorería", revisado_por: por, revisado_at: ahora, historial,
-      }).eq("id", cuentaId);
+      }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 200 });
+    // 500 para que SYD Gestión sepa que no quedó guardado (antes respondía 200).
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
   }
 });

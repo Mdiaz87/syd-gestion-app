@@ -274,7 +274,7 @@ function Control({ pres, partidas, cuentas, reports, usuario, puedeEditarProyect
   };
   const cargarOpciones = async (project) => {
     if (opcionesOtros[project]) return;
-    const ops = project === pres.project ? opciones.map(p => ({ linaje: p.linaje, label: nombre(p) })) : await loadPartidasVigentes(project);
+    const ops = project === pres.project ? opciones.map(p => ({ linaje: p.linaje, label: nombre(p) })) : ((await loadPartidasVigentes(project)) || []);
     setOpcionesOtros(o => ({ ...o, [project]: ops }));
   };
   const sumaPartes = partes.reduce((s, x) => s + (+x.pct || 0), 0);

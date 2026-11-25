@@ -91,9 +91,14 @@ export async function login(profile, pin){
   if(r.usuario) return r.usuario;
   if(r.bloqueado) return r;
   if(r.fallo) return null;
-  return loginAnterior(profile, pin);
+  // El servidor no respondió bien: se intenta el login viejo, pero sin contar
+  // el intento como fallido. Si tampoco entra, se avisa que es el servidor y no
+  // "PIN incorrecto" (antes una cuenta ya migrada veía "PIN incorrecto" y se le
+  // sumaban intentos -- auditoría 25-nov).
+  const anterior = await loginAnterior(profile, pin, { contarFallo: false });
+  return anterior || { errorServidor: true };
 }
-async function loginAnterior(profile, pin){
+async function loginAnterior(profile, pin, { contarFallo = true } = {}){
   const { data: chk } = await supabase.rpc('intentos_restantes', { p_profile_id: profile.id });
   if(chk?.bloqueado){
     return { bloqueado: true, segundosRestantes: chk.segundos_restantes };
@@ -105,7 +110,7 @@ async function loginAnterior(profile, pin){
   });
   if(error){
     console.error('Error verificando código:', error);
-    await supabase.rpc('registrar_intento_fallido', { p_profile_id: profile.id });
+    if(contarFallo) await supabase.rpc('registrar_intento_fallido', { p_profile_id: profile.id });
     return null;
   }
   return shapeUsuario(profile);
@@ -324,7 +329,7 @@ export async function enviarFacturaLegalizacion(cuentaId, facturas){
 // Cadena de firmas de Gerencia en SYD Técnica por proyecto ('*' = por defecto).
 export async function loadAprobadoresGerencia(){
   const { data, error } = await supabase.from('aprobadores_gerencia').select('project, orden, profile_id, profiles(nombre)');
-  if(error){ console.error('Error cargando aprobadores:', error); return []; }
+  if(error){ console.error('Error cargando aprobadores:', error); return null; }
   return (data||[]).map(a=>({ project:a.project, orden:a.orden, profile_id:a.profile_id, nombre:a.profiles?.nombre||'' }));
 }
 // decision: 'aprobar' | 'devolver' | 'rechazar' (estos dos con motivo).
@@ -476,9 +481,13 @@ export async function crearVersionPresupuesto(pres, partidas, usuario){
 // Actividades de los presupuestos vigentes del proyecto a las que se puede
 // cargar una cuenta de cobro (subactividades y actividades sin subactividades).
 export async function loadPartidasVigentes(project){
+  // null = no se pudo consultar (el formulario no deja enviar); [] = el proyecto
+  // de verdad no tiene presupuesto vigente (auditoría 25-nov).
   const { data: pres, error } = await supabase.from('presupuestos').select('id,nombre').eq('project', project).eq('estado','vigente');
-  if(error || !pres?.length) return [];
-  const { data: parts } = await supabase.from('partidas').select('*').in('presupuesto_id', pres.map(p=>p.id)).order('orden');
+  if(error){ console.error('Error cargando presupuestos:', error); return null; }
+  if(!pres?.length) return [];
+  const { data: parts, error: errParts } = await supabase.from('partidas').select('*').in('presupuesto_id', pres.map(p=>p.id)).order('orden');
+  if(errParts){ console.error('Error cargando actividades:', errParts); return null; }
   const { hojas, codigos } = await import('./controlPresupuesto.js');
   return pres.flatMap(pr=>{
     const ps = (parts||[]).filter(p=>p.presupuesto_id===pr.id);

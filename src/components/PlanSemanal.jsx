@@ -214,7 +214,7 @@ export function PlanSemanal({ reports, usuario }) {
 
   useEffect(() => { if (!proyecto && proyectos.length === 1) setProyecto(proyectos[0]); }, [proyectos, proyecto]);
   useEffect(() => { setReabierto(false); }, [proyecto, semana]);
-  useEffect(() => { if (proyecto) loadPartidasVigentes(proyecto).then(ops => setDelPresupuesto(ops.map(o => o.nombre))); }, [proyecto]);
+  useEffect(() => { if (proyecto) loadPartidasVigentes(proyecto).then(ops => setDelPresupuesto((ops || []).map(o => o.nombre))); }, [proyecto]);
 
   const buscar = (p, s) => (planes || []).find(x => x.project === p && String(x.semana).slice(0, 10) === s) || null;
   const mostrarAviso = (t) => { setAviso(t); setTimeout(() => setAviso(null), 6000); };

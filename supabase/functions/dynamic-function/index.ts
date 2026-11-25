@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
       monto,
     } = await req.json();
 
-    if (!legalizacionId || !["bloqueada", "por_vencer"].includes(evento)) {
+    if (!legalizacionId || !["bloqueada", "por_vencer", "resuelta"].includes(evento)) {
       return new Response(JSON.stringify({ ok: false, error: "Falta legalizacionId o evento inválido" }), { status: 400 });
     }
 

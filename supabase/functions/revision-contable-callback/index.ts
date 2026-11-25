@@ -63,10 +63,11 @@ Deno.serve(async (req) => {
     update.aprobacion_cxp_estado = null;
     update.aprobacion_cxp_error = null;
 
-    await supabase.from("cuentas_cobro").update(update).eq("id", cuentaId);
+    { const { error: eUpd } = await supabase.from("cuentas_cobro").update(update).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
 
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 200 });
+    // 500 para que SYD Gestión sepa que no quedó guardado (antes respondía 200).
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
   }
 });

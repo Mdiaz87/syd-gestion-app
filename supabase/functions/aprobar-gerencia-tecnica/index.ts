@@ -42,13 +42,13 @@ Deno.serve(async (req) => {
       const historial = [...(cuenta.historial || []), {
         accion: `Aprobado por Gerencia en SYD Técnica (${nuevas.length}/${cadena.length})`, por: perfil.nombre, fecha: ahora,
       }];
-      await db.from("cuentas_cobro").update({ aprobaciones_gerencia: nuevas, historial }).eq("id", cuentaId);
+      { const { error: eUpd } = await db.from("cuentas_cobro").update({ aprobaciones_gerencia: nuevas, historial }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
       if (!completa) return json({ ok: true, completa: false });
       const envio = await enviarACuentasPorPagar(db, { ...cuenta, aprobaciones_gerencia: nuevas });
       if (envio.ok) {
-        await db.from("cuentas_cobro").update({
+        { const { error: eUpd } = await db.from("cuentas_cobro").update({
           historial: [...historial, { accion: "Enviado a Cuentas por Pagar de SYD Gestión", por: perfil.nombre, fecha: new Date().toISOString() }],
-        }).eq("id", cuentaId);
+        }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
       }
       return json({ ok: true, completa: true, enviada: envio.ok, error: envio.error });
     }
@@ -57,13 +57,13 @@ Deno.serve(async (req) => {
     const historial = [...(cuenta.historial || []), {
       accion: devuelto ? "Devuelto por Gerencia (SYD Técnica)" : "Rechazado por Gerencia (SYD Técnica)", detalle: String(motivo).trim(), por: perfil.nombre, fecha: ahora,
     }];
-    await db.from("cuentas_cobro").update({
+    { const { error: eUpd } = await db.from("cuentas_cobro").update({
       estado: devuelto ? "devuelto" : "rechazado",
       condicion: devuelto ? String(motivo).trim() : null,
       motivo_rechazo: devuelto ? null : String(motivo).trim(),
       revisado_por: perfil.nombre, revisado_at: ahora,
       aprobaciones_gerencia: [], aprobacion_cxp_estado: null, historial,
-    }).eq("id", cuentaId);
+    }).eq("id", cuentaId); if (eUpd) throw new Error(`No se pudo guardar la cuenta ${cuentaId}: ${eUpd.message}`); }
     return json({ ok: true });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);

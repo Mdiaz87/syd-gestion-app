@@ -18,6 +18,7 @@ export function LoginScreen({usuarios, loadFailed, onRetry, onLogin}){
   const [selId,setSelId]=useState(()=>String(sorted[0]?.id||""));
   const [pin,setPin]=useState("");
   const [error,setError]=useState(false);
+  const [errorServidor,setErrorServidor]=useState(false);
   const [verificando,setVerificando]=useState(false);
   const [bloqueoSegs,setBloqueoSegs]=useState(0);
 
@@ -33,7 +34,9 @@ export function LoginScreen({usuarios, loadFailed, onRetry, onLogin}){
     setVerificando(true);
     const u=await login(profile, pin);
     setVerificando(false);
+    setErrorServidor(false);
     if(u?.bloqueado){ setBloqueoSegs(u.segundosRestantes); setPin(""); }
+    else if(u?.errorServidor){ setErrorServidor(true); setPin(""); }
     else if(u){ onLogin(u); }
     else{ setError(true); setPin(""); }
   };
@@ -74,6 +77,7 @@ export function LoginScreen({usuarios, loadFailed, onRetry, onLogin}){
               onKeyDown={e=>e.key==="Enter"&&pin.length===4&&!verificando&&bloqueoSegs===0&&check()}/>
           </div>
           {error&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>Código incorrecto. Intenta de nuevo.</div>}
+          {errorServidor&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>No se pudo verificar el código en este momento (problema del servidor, no de tu código). Intenta de nuevo en un minuto.</div>}
           {bloqueoSegs>0&&<div style={{color:C.danger,fontSize:13,textAlign:"center",marginBottom:16}}>🔒 Demasiados intentos fallidos. Intenta de nuevo en {formatoEspera(bloqueoSegs)}.</div>}
           <button onClick={check} disabled={pin.length!==4||verificando||bloqueoSegs>0}
             style={{background:pin.length===4&&!verificando&&bloqueoSegs===0?C.blue:C.border,color:"#fff",fontWeight:700,border:"none",borderRadius:12,padding:13,fontSize:15,cursor:pin.length===4&&!verificando&&bloqueoSegs===0?"pointer":"not-allowed",width:"100%",boxShadow:pin.length===4&&!verificando&&bloqueoSegs===0?"0 1px 2px rgba(0,0,0,0.18)":"none"}}>

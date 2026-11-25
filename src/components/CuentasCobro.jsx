@@ -17,9 +17,10 @@ const puedeEditar = (cuenta, usuario) =>
   (cuenta.estado === "pendiente_contable" || cuenta.estado === "devuelto") &&
   (usuario.rol === "Directivo" || cuenta.autor_id === usuario.id);
 
+// Solo Directivo: el pago lo marca SYD Gestión cuando Tesorería lo paga. Si el
+// ingeniero lo marcaba antes, se perdía la fecha real (auditoría 25-nov).
 const puedeMarcarPago = (cuenta, usuario) =>
-  cuenta.estado === "aprobado_total" &&
-  (usuario.rol === "Directivo" || usuario.rol === "Ingeniero");
+  cuenta.estado === "aprobado_total" && usuario.rol === "Directivo";
 
 // Compatibilidad: cuentas viejas solo tienen link_soporte (string único).
 const soportesDe = (cuenta) =>
@@ -50,12 +51,15 @@ const legalizacionesPendientesDe = (alertas, cuentas, usuario) => {
     const ref = String(a.referencia_externa ?? "");
     if (!ref) continue;
     const previa = porCuenta.get(ref);
-    if (!previa || (a.evento === "bloqueada" && previa.evento !== "bloqueada")) porCuenta.set(ref, a);
+    // "resuelta" (la legalización se cerró en SYD Gestión) gana sobre todo.
+    if (!previa || a.evento === "resuelta" || (a.evento === "bloqueada" && previa.evento === "por_vencer")) porCuenta.set(ref, a);
   }
   const res = [];
   for (const c of cuentas) {
     const a = porCuenta.get(String(c.id));
-    if (!a || c.autor_id !== usuario.id || c.factura_legalizacion_url) continue;
+    // Solo cuentas aprobadas: una rechazada o devuelta no tiene nada que
+    // legalizar y dejaba al ingeniero bloqueado para siempre (auditoría 25-nov).
+    if (!a || a.evento === "resuelta" || c.estado !== "aprobado_total" || c.autor_id !== usuario.id || c.factura_legalizacion_url) continue;
     res.push({ cuenta: c, evento: a.evento, fechaLimite: a.fecha_limite });
   }
   return res;
@@ -77,9 +81,15 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
   // Actividad del presupuesto vigente a la que se carga la cuenta (obligatoria si el proyecto tiene presupuesto vigente).
   const [partidaLinaje, setPartidaLinaje] = useState(editando?.partida_linaje || "");
   const [opcionesPartida, setOpcionesPartida] = useState([]);
+  const [errorPartidas, setErrorPartidas] = useState(false);
   useEffect(() => {
     let vivo = true;
-    loadPartidasVigentes(project).then(ops => { if (vivo) { setOpcionesPartida(ops); setPartidaLinaje(l => ops.some(o => o.linaje === l) ? l : ""); } });
+    loadPartidasVigentes(project).then(ops => {
+      if (!vivo) return;
+      setErrorPartidas(ops === null);
+      const lista = ops || [];
+      setOpcionesPartida(lista); setPartidaLinaje(l => lista.some(o => o.linaje === l) ? l : "");
+    });
     return () => { vivo = false; };
   }, [project]);
   const empresaInicial = editando?.empresa || "";
@@ -165,6 +175,7 @@ function CuentaForm({ usuario, editando, onGuardada, onCancelarEdicion, bloquead
     if (!proveedor.trim()) { setError("⚠️ Escribe el proveedor/contratista."); return; }
     if (!conceptoFinal) { setError("⚠️ Escribe el concepto/actividad."); return; }
     if (!valor || +valor <= 0) { setError("⚠️ Ingresa un valor a pagar mayor a cero."); return; }
+    if (errorPartidas) { setError("⚠️ No se pudo cargar el presupuesto del proyecto. Revisa tu conexión y vuelve a intentar antes de enviar."); return; }
     if (opcionesPartida.length && !partidaLinaje) { setError("⚠️ Escoge la actividad del presupuesto a la que se carga esta cuenta."); return; }
 
     setEnviando(true);
@@ -695,7 +706,12 @@ export function CuentasCobro({ cuentas, usuario, onRefresh }) {
 
   const [aprobadores, setAprobadores] = useState([]);
   const [firmando, setFirmando] = useState(null);
-  useEffect(() => { loadAprobadoresGerencia().then(setAprobadores); }, []);
+  useEffect(() => {
+    loadAprobadoresGerencia().then(a => {
+      if (a === null) { setAviso("⚠️ No se pudo cargar quién firma en Gerencia: las firmas pendientes no se ven. Recarga la página."); setAprobadores([]); }
+      else setAprobadores(a);
+    });
+  }, []);
 
   const proyectos = useMemo(() => [...new Set(cuentas.map(c => c.project))].sort(), [cuentas]);
 
